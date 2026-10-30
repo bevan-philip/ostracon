@@ -1,15 +1,26 @@
 import OstraconCore
 import SwiftUI
 
-/// Inbox tray, or a `#` in the project's colour.
+/// A white tray (Inbox) or `#` (projects) on a circle of the project's colour.
 struct ProjectIcon: View {
-    let project: Project
+    private let isInbox: Bool
+    private let color: Color
+
+    init(project: Project) {
+        isInbox = project.isInbox
+        color = Theme.tint(for: project)
+    }
+
+    /// A project icon for a colour that isn't saved yet, such as in the project editor.
+    init(color: ProjectColor) {
+        isInbox = false
+        self.color = Theme.color(for: color)
+    }
 
     var body: some View {
-        Image(systemName: project.isInbox ? "tray" : "number")
-            .foregroundStyle(project.isInbox ? Theme.inboxColor : Theme.color(for: project.color))
-            .fontWeight(.medium)
-            .frame(width: 18)
+        Image(systemName: isInbox ? "tray.circle.fill" : "number.circle.fill")
+            .symbolRenderingMode(.palette)
+            .foregroundStyle(.white, color)
             .accessibilityHidden(true)
     }
 }

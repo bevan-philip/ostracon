@@ -1,6 +1,6 @@
 # Ostracon
 
-A small SwiftUI task manager for macOS in the style of Todoist, backed by SQLite.
+A small SwiftUI task manager for macOS with a Todoist-style workflow and a standard Mac interface, backed by SQLite.
 
 - **Inbox** plus your own colour-coded **projects**
 - **`#Project`** anywhere in a task's name files it into that project (multi-word names work, e.g. `#Work Admin`), with autocomplete

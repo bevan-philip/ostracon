@@ -9,18 +9,14 @@ struct ContentView: View {
 
         NavigationSplitView {
             SidebarView()
-                .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 360)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 360)
         } detail: {
             TaskListView()
         }
-        .tint(Theme.accent)
-        .sheet(item: $model.projectDraft) { draft in
-            ProjectEditorSheet(draft: draft)
-        }
-        .alert("Something went wrong", isPresented: $model.isShowingError) {
-            Button("OK") { model.errorMessage = nil }
-        } message: {
-            Text(model.errorMessage ?? "")
+        .sheet(item: $model.projectDraft, content: ProjectEditorSheet.init)
+        .alert("Something Went Wrong", item: $model.errorMessage) { _ in
+        } message: { message in
+            Text(message)
         }
     }
 }

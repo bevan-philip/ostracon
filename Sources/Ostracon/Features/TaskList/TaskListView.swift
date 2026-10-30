@@ -3,28 +3,50 @@ import SwiftUI
 
 struct TaskListView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var isListFocused: Bool
 
     var body: some View {
         @Bindable var model = model
+        let groups = model.cardGroups
 
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    header
-                    taskList
-                    if model.composer == nil {
-                        AddTaskRow { model.startAddingTask() }
-                        if model.rows.isEmpty {
-                            EmptyStateView()
+                    if let project = model.selectedProject {
+                        TaskListHeader(project: project, openCount: model.openCount(for: project))
+                            .padding(.horizontal, Theme.rowPadding)
+                            .padding(.top, 8)
+                            .padding(.bottom, 16)
+                    }
+
+                    LazyVStack(alignment: .leading, spacing: Theme.taskSpacing) {
+                        ForEach(groups) { group in
+                            TaskCard(group: group, selectedTaskID: model.selectedTaskID, onSelect: select)
+                                .transition(.opacity)
                         }
                     }
+                    .animation(.snappy(duration: 0.2), value: groups)
+
+                    if model.composer == nil {
+                        AddTaskRow(action: model.startAddingTask)
+                            .padding(.top, Theme.taskSpacing)
+                    }
+
+                    if model.composer == nil && groups.isEmpty {
+                        ContentUnavailableView(
+                            "All Clear",
+                            systemImage: "checkmark.circle",
+                            description: Text("Press A or ⌘N to add a task. Type #ProjectName to file it somewhere else.")
+                        )
+                    }
                 }
-                .frame(maxWidth: 800, alignment: .leading)
-                .padding(.horizontal, 40)
-                .padding(.bottom, 80)
+                .padding(.horizontal, 24)
+                .padding(.vertical)
+                .frame(maxWidth: Theme.contentMaxWidth)
                 .frame(maxWidth: .infinity)
             }
+            .tint(model.selectedProject.map(Theme.tint(for:)))
             .onChange(of: model.selectedTaskID) { _, taskID in
                 guard let taskID else { return }
                 withAnimation(.easeOut(duration: 0.15)) {
@@ -32,7 +54,6 @@ struct TaskListView: View {
                 }
             }
         }
-        .background(Theme.contentBackground)
         .focusable()
         .focused($isListFocused)
         .focusEffectDisabled()
@@ -40,59 +61,38 @@ struct TaskListView: View {
         .onChange(of: model.composer) { _, composer in
             if composer == nil { isListFocused = true }
         }
+        // Choosing a project in the sidebar hands the keyboard straight back to the task list.
+        .onChange(of: model.selectedProjectID) {
+            isListFocused = true
+        }
         .onAppear { isListFocused = true }
         .overlay(alignment: .bottom) {
             if let toast = model.toast {
                 ToastView(toast: toast)
                     .padding(.bottom, 24)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
             }
         }
         .animation(.snappy(duration: 0.25), value: model.toast)
-        .confirmationDialog(
-            "Delete task?",
-            isPresented: $model.isConfirmingTaskDeletion,
-            presenting: model.taskPendingDeletion
-        ) { task in
+        .confirmationDialog("Delete Task?", item: $model.taskPendingDeletion) { task in
             Button("Delete", role: .destructive) { model.confirmDeletion(task) }
         } message: { task in
             Text("“\(task.content)” and any subtasks will be permanently deleted.")
         }
         .navigationTitle(model.selectedProject?.name ?? "Ostracon")
-        .toolbar(removing: .title)
+        .modifier(HeaderReplacesToolbarTitle())
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            if #available(macOS 26, *) {
+                ToolbarSpacer(.flexible)
+            }
+            ToolbarItemGroup(placement: .primaryAction) {
                 Toggle("Show Completed", systemImage: "checkmark.circle", isOn: $model.showCompleted)
                     .help(model.showCompleted ? "Hide completed tasks (⇧⌘C)" : "Show completed tasks (⇧⌘C)")
+                Button("New Task", systemImage: "plus", action: model.startAddingTask)
+                    .help("Add a task to the current project (⌘N)")
+                    .disabled(model.selectedProject == nil)
             }
         }
-    }
-
-    private var header: some View {
-        Text(model.selectedProject?.name ?? "")
-            .font(.title.bold())
-            .padding(.top, 36)
-            .padding(.bottom, 16)
-            .accessibilityAddTraits(.isHeader)
-    }
-
-    private var taskList: some View {
-        LazyVStack(alignment: .leading, spacing: 0) {
-            ForEach(model.listItems) { item in
-                switch item {
-                case .task(let row):
-                    TaskRowView(row: row) { select(row.id) }
-                        .id(item.id)
-                        .transition(.opacity)
-                case .composer(let mode, let depth):
-                    TaskComposerView(mode: mode)
-                        .id(mode)
-                        .padding(.leading, Double(depth) * 30)
-                        .padding(.vertical, 8)
-                }
-            }
-        }
-        .animation(.snappy(duration: 0.2), value: model.listItems)
     }
 
     private func select(_ taskID: Int64) {

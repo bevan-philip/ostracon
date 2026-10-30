@@ -46,23 +46,22 @@ final class AppModel {
 
     // MARK: - Derived state
 
-    var isShowingError: Bool {
-        get { errorMessage != nil }
-        set { if !newValue { errorMessage = nil } }
-    }
-
-    var isConfirmingProjectDeletion: Bool {
-        get { projectPendingDeletion != nil }
-        set { if !newValue { projectPendingDeletion = nil } }
-    }
-
-    var isConfirmingTaskDeletion: Bool {
-        get { taskPendingDeletion != nil }
-        set { if !newValue { taskPendingDeletion = nil } }
+    /// The sidebar's selection. Choosing a project goes through `select(project:)`;
+    /// deselecting is ignored so there is always a project on screen.
+    var sidebarSelection: Int64? {
+        get { selectedProjectID }
+        set {
+            guard let newValue, let project = project(id: newValue) else { return }
+            select(project: project)
+        }
     }
 
     var selectedProject: Project? {
         projects.first { $0.id == selectedProjectID }
+    }
+
+    var inbox: Project? {
+        projects.first(where: \.isInbox)
     }
 
     var userProjects: [Project] {
@@ -76,6 +75,7 @@ final class AppModel {
 
     /// The rows with the composer spliced in where it belongs.
     var listItems: [TaskListItem] {
+        let rows = rows
         var items = rows.map(TaskListItem.task)
         switch composer {
         case nil:
@@ -96,6 +96,27 @@ final class AppModel {
             }
         }
         return items
+    }
+
+    /// The list items split into cards: each top-level task with its subtasks beneath it.
+    var cardGroups: [TaskCardGroup] {
+        var groups: [TaskCardGroup] = []
+        for item in listItems {
+            if item.depth == 0 || groups.isEmpty {
+                groups.append(TaskCardGroup(id: Self.cardGroupID(for: item), items: [item]))
+            } else {
+                groups[groups.count - 1].items.append(item)
+            }
+        }
+        return groups
+    }
+
+    private static func cardGroupID(for item: TaskListItem) -> String {
+        switch item {
+        case .task(let row): "card-\(row.id)"
+        case .composer(.edit(let taskID), _): "card-\(taskID)"
+        case .composer(.add, _): "card-new"
+        }
     }
 
     func openCount(for project: Project) -> Int {
@@ -306,7 +327,7 @@ final class AppModel {
 
     func confirmDeletion(_ project: Project) {
         if selectedProjectID == project.id {
-            selectedProjectID = projects.first(where: \.isInbox)?.id
+            selectedProjectID = inbox?.id
             selectedTaskID = nil
             composer = nil
         }

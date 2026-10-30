@@ -8,13 +8,13 @@ struct TaskCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button("New Task") { model.startAddingTask() }
+            Button("New Task", action: model.startAddingTask)
                 .keyboardShortcut("n")
                 .disabled(model.selectedProject == nil)
             Button("New Subtask") { model.startAddingSubtask() }
                 .keyboardShortcut("n", modifiers: [.command, .option])
                 .disabled(!canActOnSelection)
-            Button("New Project…") { model.startCreatingProject() }
+            Button("New Project…", action: model.startCreatingProject)
                 .keyboardShortcut("n", modifiers: [.command, .shift])
         }
 

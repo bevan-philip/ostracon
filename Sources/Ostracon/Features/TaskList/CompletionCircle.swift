@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Todoist's round checkbox: hovering previews the tick.
+/// A task's checkbox: an empty circle that previews the tick on hover and fills when done.
 struct CompletionCircle: View {
     let isCompleted: Bool
     let action: () -> Void
@@ -9,22 +9,25 @@ struct CompletionCircle: View {
 
     var body: some View {
         Button(action: action) {
-            ZStack {
-                Circle()
-                    .fill(isCompleted ? Theme.checkbox : Theme.checkbox.opacity(isHovered ? 0.12 : 0))
-                Circle()
-                    .strokeBorder(Theme.checkbox, lineWidth: 1)
-                if isCompleted || isHovered {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(isCompleted ? .white : Theme.checkbox)
-                }
-            }
-            .frame(width: 18, height: 18)
-            .contentShape(.circle)
+            Image(systemName: symbolName)
+                .imageScale(.large)
+                .foregroundStyle(isCompleted ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                .contentTransition(.symbolEffect(.replace))
+                // A plain button only hit-tests opaque pixels; this makes the circle's middle clickable too.
+                .contentShape(.circle)
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        .accessibilityLabel(isCompleted ? "Mark as not done" : "Complete task")
+        .accessibilityLabel(isCompleted ? "Mark as Not Done" : "Complete Task")
+    }
+
+    private var symbolName: String {
+        if isCompleted {
+            "checkmark.circle.fill"
+        } else if isHovered {
+            "checkmark.circle"
+        } else {
+            "circle"
+        }
     }
 }

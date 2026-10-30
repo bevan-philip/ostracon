@@ -32,6 +32,42 @@ struct AppModelTests {
         #expect(!model.submitComposer(mode: .add(parentID: nil), text: "   ", details: "", projectID: inboxID))
     }
 
+    @Test func sidebarSelectionSwitchesProjectAndIgnoresDeselection() throws {
+        let work = try createProject("Work")
+        model.submitComposer(mode: .add(parentID: nil), text: "Inbox task", details: "", projectID: inboxID)
+        model.selectedTaskID = model.rows.first?.id
+        model.startAddingTask()
+
+        model.sidebarSelection = work.id
+        #expect(model.selectedProjectID == work.id)
+        #expect(model.selectedTaskID == nil)
+        #expect(model.composer == nil)
+
+        model.sidebarSelection = nil
+        #expect(model.selectedProjectID == work.id, "Deselecting in the sidebar keeps the current project")
+    }
+
+    @Test func subtasksShareTheirTopLevelTasksCard() throws {
+        for name in ["A", "A1", "A2", "B"] {
+            model.submitComposer(mode: .add(parentID: nil), text: name, details: "", projectID: inboxID)
+        }
+        let ids = model.rows.map(\.id)
+        model.indent(ids[1])
+        model.indent(ids[2])
+        model.indent(ids[2])
+        #expect(contents == ["A", "  A1", "    A2", "B"])
+        #expect(model.cardGroups.map { $0.items.count } == [3, 1])
+
+        model.startAddingSubtask(to: ids[0])
+        #expect(model.cardGroups.map { $0.items.count } == [4, 1], "A subtask composer joins its parent's card")
+
+        model.startEditing(ids[0])
+        #expect(model.cardGroups.first?.id == "card-\(ids[0])", "Editing keeps the card's identity")
+
+        model.startAddingTask()
+        #expect(model.cardGroups.last?.isStandaloneComposer == true)
+    }
+
     @Test func hashtagFilesTaskIntoProjectAndShowsToast() throws {
         let work = try createProject("Work")
         model.submitComposer(mode: .add(parentID: nil), text: "Write report #work", details: "", projectID: inboxID)

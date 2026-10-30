@@ -11,4 +11,11 @@ enum TaskListItem: Identifiable, Equatable {
         case .composer: "composer"
         }
     }
+
+    var depth: Int {
+        switch self {
+        case .task(let row): row.depth
+        case .composer(_, let depth): depth
+        }
+    }
 }

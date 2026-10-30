@@ -12,46 +12,46 @@ struct ProjectEditorSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(draft.isNew ? "Add project" : "Edit project")
-                .font(.title3.bold())
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Name")
-                    .font(.callout.weight(.semibold))
+        Form {
+            Section {
                 TextField("Name", text: $draft.name, prompt: Text("e.g. Work"))
-                    .textFieldStyle(.roundedBorder)
                     .focused($isNameFocused)
                     .onSubmit(save)
+                LabeledContent("Color") {
+                    ColorSwatchGrid(selection: $draft.color)
+                }
+            } header: {
+                ProjectEditorPreview(draft: draft)
+            } footer: {
                 if draft.name.contains(where: \.isWhitespace) {
                     Text("Tip: type #\(draft.name.trimmingCharacters(in: .whitespaces)) in a task to file it here.")
-                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Color")
-                    .font(.callout.weight(.semibold))
-                ColorSwatchGrid(selection: $draft.color)
-            }
-
-            HStack {
-                Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
+        }
+        .formStyle(.grouped)
+        .frame(width: 520)
+        .fixedSize(horizontal: false, vertical: true)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel", role: .cancel, action: cancel)
                     .keyboardShortcut(.cancelAction)
+            }
+            ToolbarItem(placement: .confirmationAction) {
                 Button(draft.isNew ? "Add" : "Save", action: save)
                     .keyboardShortcut(.defaultAction)
                     .disabled(trimmedName.isEmpty)
             }
         }
-        .padding(20)
-        .frame(width: 380)
         .onAppear { isNameFocused = true }
     }
 
     private var trimmedName: String {
         draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func cancel() {
+        dismiss()
     }
 
     private func save() {

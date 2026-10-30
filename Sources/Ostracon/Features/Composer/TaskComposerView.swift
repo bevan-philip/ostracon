@@ -26,7 +26,6 @@ struct TaskComposerView: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
                 TextField("Task name", text: $text, prompt: Text("Task name — type # to pick a project"))
-                    .font(.body.weight(.medium))
                     .focused($focusedField, equals: .content)
                     .onSubmit(submit)
                     .onKeyPress(.downArrow) { moveHighlight(by: 1) }
@@ -52,7 +51,7 @@ struct TaskComposerView: View {
 
             Divider()
 
-            HStack(spacing: 8) {
+            HStack {
                 ProjectPickerMenu(
                     projects: model.projects,
                     selectedProjectID: effectiveProjectID,
@@ -60,18 +59,19 @@ struct TaskComposerView: View {
                     onSelect: pick
                 )
                 Spacer()
-                Button("Cancel") { model.closeComposer() }
-                    .buttonStyle(ComposerButtonStyle(isProminent: false))
-                Button(isEditing ? "Save" : "Add task", action: submit)
-                    .buttonStyle(ComposerButtonStyle(isProminent: true))
+                Button("Cancel", action: model.closeComposer)
+                Button(isEditing ? "Save" : "Add Task", action: submit)
+                    .buttonStyle(.borderedProminent)
                     .disabled(parsed.content.isEmpty)
             }
             .padding(8)
         }
-        .background(Theme.contentBackground, in: .rect(cornerRadius: 10))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(focusedField == nil ? Theme.composerBorder : Theme.composerBorderFocused)
+        // A card lifted off the page, outlined in the project's colour while it has the keyboard.
+        .background {
+            RoundedRectangle(cornerRadius: Theme.composerCornerRadius)
+                .fill(.background)
+                .stroke(focusedField == nil ? AnyShapeStyle(.separator) : AnyShapeStyle(.tint.secondary))
+                .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
         }
         .onExitCommand(perform: handleEscape)
         .onChange(of: text) { _, newText in

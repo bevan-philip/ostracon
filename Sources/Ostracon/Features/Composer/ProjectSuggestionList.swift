@@ -13,20 +13,24 @@ struct ProjectSuggestionList: View {
                 Button {
                     onSelect(project)
                 } label: {
-                    HStack(spacing: 8) {
-                        ProjectIcon(project: project)
-                        Text(project.name)
-                        Spacer()
-                        if index == highlightedIndex {
-                            Text("⇥")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .accessibilityHidden(true)
+                    HStack {
+                        Label {
+                            Text(project.name)
+                        } icon: {
+                            ProjectIcon(project: project)
                         }
+                        Spacer()
+                        Text("⇥")
+                            .foregroundStyle(.secondary)
+                            .opacity(index == highlightedIndex ? 1 : 0)
+                            .accessibilityHidden(true)
                     }
                     .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(index == highlightedIndex ? Theme.rowSelection : .clear, in: .rect(cornerRadius: 5))
+                    .padding(.vertical, 4)
+                    .background(
+                        index == highlightedIndex ? AnyShapeStyle(.tint.quaternary) : AnyShapeStyle(.clear),
+                        in: .rect(cornerRadius: 5)
+                    )
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
@@ -34,12 +38,7 @@ struct ProjectSuggestionList: View {
             }
         }
         .padding(4)
-        .background(Theme.contentBackground, in: .rect(cornerRadius: 8))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Theme.composerBorder)
-        }
-        .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
+        .glassSurface(in: .rect(cornerRadius: 9))
         .frame(maxWidth: 320, alignment: .leading)
     }
 }

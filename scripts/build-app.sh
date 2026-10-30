@@ -13,6 +13,13 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Ostracon"
 
+# SwiftPM records the deployment target (15.0) as the SDK version, which makes macOS 26+ run the app in its
+# compatibility appearance, without Liquid Glass. Record the SDK it was really built with.
+SDK_VERSION="$(xcrun --show-sdk-version)"
+vtool -set-build-version macos 15.0 "$SDK_VERSION" -replace \
+    -output "$APP/Contents/MacOS/Ostracon.tmp" "$APP/Contents/MacOS/Ostracon" 2>/dev/null
+mv "$APP/Contents/MacOS/Ostracon.tmp" "$APP/Contents/MacOS/Ostracon"
+
 ICONSET="$(mktemp -d)/Ostracon.iconset"
 swift scripts/make-icon.swift "$ICONSET"
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/Ostracon.icns"

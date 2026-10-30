@@ -29,13 +29,16 @@ struct ProjectPickerMenu: View {
                     Text(selected.name)
                 }
                 Image(systemName: "chevron.down")
-                    .font(.caption2.weight(.semibold))
+                    .imageScale(.small)
                     .foregroundStyle(.secondary)
             }
             .font(.callout)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(isFromHashtag ? Theme.sidebarSelection : Theme.secondaryButton, in: .rect(cornerRadius: 5))
+            .background(
+                isFromHashtag ? AnyShapeStyle(.tint.quaternary) : AnyShapeStyle(.fill.tertiary),
+                in: .capsule
+            )
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
