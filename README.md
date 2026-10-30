@@ -22,6 +22,32 @@ Data lives in `~/Library/Application Support/Ostracon/ostracon.sqlite`. Set `OST
 
 To work in Xcode, open `Package.swift`.
 
+## MCP server
+
+`ostracon-mcp` lets AI assistants such as Claude read and manage your tasks over the [Model Context Protocol](https://modelcontextprotocol.io). It ships inside the app at `Ostracon.app/Contents/MacOS/ostracon-mcp` and works on the same database whether or not Ostracon is open; the app picks up its changes within a second.
+
+Tools: `list_projects`, `list_tasks` (filter by project, text, or `due_by: "today"`), `get_task`, `add_task` (understands quick-add text like `Pay rent tomorrow 9am #Home !1h`), `update_task`, `complete_task`, `delete_task`, `add_project`, `update_project`, `delete_project`.
+
+It has **no authentication**. Over stdio (the default) only the client that launched it can talk to it. With `--http [port]` it listens on `http://127.0.0.1:8765/mcp`, loopback only, and refuses requests whose `Host` or `Origin` isn't local, but any program on your Mac can still use it.
+
+Claude Code:
+
+```bash
+claude mcp add ostracon -- "$PWD/build/Ostracon.app/Contents/MacOS/ostracon-mcp"
+```
+
+Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "ostracon": { "command": "/Applications/Ostracon.app/Contents/MacOS/ostracon-mcp" }
+  }
+}
+```
+
+For clients that only take a URL, run `ostracon-mcp --http` and point them at `http://127.0.0.1:8765/mcp`. While developing, `swift run ostracon-mcp` runs it straight from the package.
+
 ## Keyboard
 
 | Where | Key | Action |
@@ -66,6 +92,7 @@ Notifications need permission the first time they're scheduled; they only work f
 ```
 Sources/OstraconCore   SQLite wrapper, repository, #-and-date parsers, task tree, reminder schedule (no UI)
 Sources/Ostracon       SwiftUI app, organised by feature (Sidebar, TaskList, Composer, Reminders, Toast)
-Tests/                 Swift Testing suites for the core and the app model
+Sources/OstraconMCP    ostracon-mcp, the MCP server: JSON-RPC handling, tools, stdio and HTTP transports
+Tests/                 Swift Testing suites for the core, the app model and the MCP server
 scripts/               App bundling and icon generation
 ```

@@ -171,6 +171,23 @@ struct TaskRepositoryTests {
         #expect(try repository.task(id: other.id)?.reminders == [])
     }
 
+    @Test func noticesWritesFromAnotherConnection() throws {
+        let path = FileManager.default.temporaryDirectory.appending(path: "ostracon-\(UUID().uuidString).sqlite").path()
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let app = try TaskRepository(database: SQLiteDatabase(path: path))
+        let server = try TaskRepository(database: SQLiteDatabase(path: path))
+        let inboxID = try app.inbox().id
+
+        #expect(try app.hasExternalChanges() == false)
+        try app.addTask(content: "Own write", projectID: inboxID)
+        #expect(try app.hasExternalChanges() == false, "A connection's own writes don't count")
+
+        try server.addTask(content: "From the MCP server", projectID: inboxID)
+        #expect(try app.hasExternalChanges())
+        #expect(try app.hasExternalChanges() == false, "Each change is reported once")
+        #expect(try app.tasks().map(\.content) == ["Own write", "From the MCP server"])
+    }
+
     @Test func dueDateStorageFormat() {
         #expect(DueDate(year: 2026, month: 1, day: 5).storageValue == "2026-01-05")
         let timed = DueDate(year: 2026, month: 1, day: 5, time: TimeOfDay(hour: 9, minute: 5))

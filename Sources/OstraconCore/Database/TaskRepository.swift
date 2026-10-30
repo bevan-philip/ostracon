@@ -3,11 +3,20 @@ import Foundation
 /// All persistence for projects and tasks.
 public final class TaskRepository {
     private let database: SQLiteDatabase
+    private var lastDataVersion: Int64?
 
     public init(database: SQLiteDatabase) throws {
         self.database = database
         try Schema.migrate(database)
         try ensureInbox()
+        lastDataVersion = try dataVersion()
+    }
+
+    /// Whether another connection, such as the MCP server, has committed changes since this was last asked.
+    public func hasExternalChanges() throws -> Bool {
+        let version = try dataVersion()
+        defer { lastDataVersion = version }
+        return version != lastDataVersion
     }
 
     /// Opens the repository stored in the user's Application Support folder,
@@ -272,6 +281,11 @@ public final class TaskRepository {
     }
 
     // MARK: - Helpers
+
+    /// Changes whenever another connection commits; this connection's own writes leave it alone.
+    private func dataVersion() throws -> Int64 {
+        try database.query("PRAGMA data_version") { $0.int(0) }.first ?? 0
+    }
 
     private func ensureInbox() throws {
         let count = try database.query("SELECT COUNT(*) FROM projects WHERE is_inbox = 1") { $0.int(0) }.first ?? 0

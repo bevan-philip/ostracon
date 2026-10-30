@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v15)],
     products: [
         .executable(name: "Ostracon", targets: ["Ostracon"]),
+        .executable(name: "ostracon-mcp", targets: ["OstraconMCP"]),
         .library(name: "OstraconCore", targets: ["OstraconCore"])
     ],
     targets: [
@@ -17,9 +18,17 @@ let package = Package(
             name: "Ostracon",
             dependencies: ["OstraconCore"]
         ),
+        .executableTarget(
+            name: "OstraconMCP",
+            dependencies: ["OstraconCore"]
+        ),
         .testTarget(
             name: "OstraconCoreTests",
             dependencies: ["OstraconCore"]
+        ),
+        .testTarget(
+            name: "OstraconMCPTests",
+            dependencies: ["OstraconMCP", "OstraconCore"]
         ),
         .testTarget(
             name: "OstraconTests",

@@ -417,6 +417,21 @@ final class AppModel {
 
     // MARK: - Helpers
 
+    /// Picks up changes another process, such as `ostracon-mcp`, has written to the database.
+    func reloadIfChangedElsewhere() {
+        guard (try? repository.hasExternalChanges()) == true else { return }
+        reload()
+        if let selectedProjectID, project(id: selectedProjectID) == nil {
+            self.selectedProjectID = inbox?.id
+        }
+        if let selectedTaskID, task(id: selectedTaskID) == nil {
+            self.selectedTaskID = nil
+        }
+        if case .edit(let taskID) = composer, task(id: taskID) == nil {
+            composer = nil
+        }
+    }
+
     func reload() {
         do {
             projects = try repository.projects()

@@ -18,5 +18,12 @@ struct ContentView: View {
         } message: { message in
             Text(message)
         }
+        .task {
+            // `PRAGMA data_version` is a cheap read, so polling keeps up with the MCP server without a file watcher.
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                model.reloadIfChangedElsewhere()
+            }
+        }
     }
 }

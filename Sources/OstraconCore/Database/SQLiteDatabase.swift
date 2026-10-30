@@ -16,6 +16,8 @@ public final class SQLiteDatabase {
             sqlite3_close(handle)
             throw SQLiteError(code: result, message: message)
         }
+        // The app and the MCP server share the file, so wait out each other's writes rather than failing.
+        sqlite3_busy_timeout(handle, 5_000)
         try execute("PRAGMA foreign_keys = ON")
         try execute("PRAGMA journal_mode = WAL")
     }

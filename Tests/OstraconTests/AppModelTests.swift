@@ -1,3 +1,4 @@
+import Foundation
 @testable import Ostracon
 import OstraconCore
 import Testing
@@ -151,5 +152,24 @@ struct AppModelTests {
         model.confirmDeletion(work)
         #expect(model.selectedProjectID == inboxID)
         #expect(model.userProjects.isEmpty)
+    }
+
+    @Test func picksUpChangesFromAnotherProcess() throws {
+        let path = FileManager.default.temporaryDirectory.appending(path: "ostracon-\(UUID().uuidString).sqlite").path()
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let model = AppModel(repository: try TaskRepository(database: SQLiteDatabase(path: path)))
+        let server = try TaskRepository(database: SQLiteDatabase(path: path))
+        let inboxID = try #require(model.selectedProjectID)
+        let task = try server.addTask(content: "Added over MCP", projectID: inboxID)
+
+        model.reloadIfChangedElsewhere()
+        #expect(model.rows.map(\.task.content) == ["Added over MCP"])
+
+        model.selectedTaskID = task.id
+        model.composer = .edit(taskID: task.id)
+        try server.deleteTask(id: task.id)
+        model.reloadIfChangedElsewhere()
+        #expect(model.selectedTaskID == nil)
+        #expect(model.composer == nil, "The composer closes when the task it edits is deleted elsewhere")
     }
 }
