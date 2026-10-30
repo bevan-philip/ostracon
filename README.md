@@ -71,6 +71,10 @@ ostracon project add 'Work Admin' --color 'lime green'
 
 Projects can be given by ID or name. Single-quote task text so the shell leaves `#` and `!` alone. Add `--json` to any command for the tool's JSON output, and see `ostracon --help` for every option. While developing, `swift run ostracon-cli list` runs it straight from the package.
 
+### Agent skill
+
+[`skills/ostracon`](skills/ostracon/SKILL.md) teaches coding agents such as Claude Code to manage your tasks with the CLI, an alternative to the MCP server. Install it with `npx skills add bevan-philip/ostracon`, or copy the folder into `~/.claude/skills/`.
+
 ## Keyboard
 
 | Where | Key | Action |
