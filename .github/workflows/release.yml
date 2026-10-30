@@ -11,10 +11,13 @@ permissions:
 
 jobs:
   release:
-    # The macOS 26 SDK gives the app Liquid Glass; see scripts/build-app.sh.
-    runs-on: macos-26
+    # The code uses SwiftUI API from the macOS 27 SDK, which the macos-26 image's Xcodes lack.
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v5
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_27.2.app
 
       - name: Test
         run: swift test
