@@ -59,6 +59,10 @@ struct TaskRowView: View {
         .simultaneousGesture(TapGesture(count: 2).onEnded(edit))
         .onHover { isHovered = $0 }
         .contextMenu { TaskMenuItems(task: task) }
+        // Dragging a selected task takes the rest of the selection with it.
+        .draggable(TaskDragPayload(taskIDs: model.taskIDs(actingOn: task.id))) {
+            TaskDragPreview(title: task.content, count: model.taskIDs(actingOn: task.id).count)
+        }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         // Without these, activating the combined row would press its first child: the checkbox.
@@ -86,15 +90,16 @@ struct TaskRowView: View {
     }
 
     private func complete() {
+        // The checkbox only ever ticks its own task, even when others are selected too.
         guard !task.isCompleted else {
-            model.toggleCompleted(task.id)
+            model.toggleCompleted([task.id])
             return
         }
         withAnimation(.easeOut(duration: 0.2)) {
             isCompleting = true
         } completion: {
             withAnimation(.easeOut(duration: 0.2)) {
-                model.toggleCompleted(task.id)
+                model.toggleCompleted([task.id])
             }
             isCompleting = false
         }

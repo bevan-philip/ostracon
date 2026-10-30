@@ -5,7 +5,7 @@ struct TaskCard: View {
     @Environment(\.colorScheme) private var colorScheme
 
     let group: TaskCardGroup
-    let selectedTaskID: Int64?
+    let selectedTaskIDs: Set<Int64>
     let onSelect: (Int64) -> Void
 
     var body: some View {
@@ -19,7 +19,7 @@ struct TaskCard: View {
                     }
                     switch item {
                     case .task(let row):
-                        TaskRowView(row: row, isSelected: row.id == selectedTaskID, onSelect: onSelect)
+                        TaskRowView(row: row, isSelected: selectedTaskIDs.contains(row.id), onSelect: onSelect)
                     case .composer(let mode, let depth):
                         TaskComposerView(mode: mode)
                             .id(mode)

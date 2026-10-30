@@ -7,6 +7,7 @@ A small SwiftUI task manager for macOS with a Todoist-style workflow and a stand
 - **Due dates** typed Todoist-style anywhere in a task's name — `tomorrow 5pm`, `next fri`, `in 3 days`, `jan 27`, `27/1`, `end of month` — or picked from the date chip
 - **Reminders** with `!`: `!30min` before the due time, or `!tomorrow 9am`; timed tasks also notify at their due time
 - **Nested tasks**: indent, outdent, collapse
+- **Drag** tasks onto a project in the sidebar to move them; ⌘-click or ⇧-click to select several and move, complete or delete them together
 - **Keyboard first**: Return saves a task and leaves the composer open for the next one
 
 ## Build and run

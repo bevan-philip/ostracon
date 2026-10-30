@@ -13,7 +13,22 @@ final class AppModel {
     private(set) var tasks: [TaskItem] = []
 
     var selectedProjectID: Int64?
-    var selectedTaskID: Int64?
+
+    /// The task the keyboard acts on, and where a Shift-click range starts.
+    /// Setting it selects that task alone, clearing any multiple selection.
+    var selectedTaskID: Int64? {
+        didSet {
+            selectedTaskIDs = selectedTaskID.map { [$0] } ?? []
+            selectionEnd = nil
+        }
+    }
+
+    /// Every selected task. Always contains `selectedTaskID` when that is set, and is empty when it isn't.
+    private(set) var selectedTaskIDs: Set<Int64> = []
+
+    /// The far end of a range grown with Shift-arrow, which moves while `selectedTaskID` stays put.
+    private var selectionEnd: Int64?
+
     var showCompleted = false
 
     /// The inline composer, or `nil` when it is closed.
@@ -21,7 +36,7 @@ final class AppModel {
 
     var projectDraft: ProjectDraft?
     var projectPendingDeletion: Project?
-    var taskPendingDeletion: TaskItem?
+    var tasksPendingDeletion: [TaskItem] = []
     var toast: Toast?
     var errorMessage: String?
 
@@ -125,6 +140,33 @@ final class AppModel {
         }
     }
 
+    var hasMultipleSelection: Bool {
+        selectedTaskIDs.count > 1
+    }
+
+    /// The tasks a command on `taskID` acts on, in outline order: the whole selection when `taskID`
+    /// is part of it (or is `nil`), otherwise just that task.
+    func taskIDs(actingOn taskID: Int64? = nil) -> [Int64] {
+        if let taskID, !selectedTaskIDs.contains(taskID) {
+            return [taskID]
+        }
+        return topmost(rows.map(\.id).filter(selectedTaskIDs.contains))
+    }
+
+    /// Drops any task whose parent, grandparent and so on is also in `taskIDs`, since acting on
+    /// the ancestor already takes its subtasks along.
+    func topmost(_ taskIDs: [Int64]) -> [Int64] {
+        let included = Set(taskIDs)
+        return taskIDs.filter { taskID in
+            var ancestorID = task(id: taskID)?.parentID
+            while let id = ancestorID {
+                if included.contains(id) { return false }
+                ancestorID = task(id: id)?.parentID
+            }
+            return true
+        }
+    }
+
     func openCount(for project: Project) -> Int {
         TaskTree.openCount(in: tasks, projectID: project.id)
     }
@@ -165,6 +207,50 @@ final class AppModel {
         }
         let next = min(max(current + offset, 0), rows.count - 1)
         selectedTaskID = rows[next].id
+    }
+
+    /// Command-click: adds a task to the selection, or takes it out.
+    func toggleSelection(of taskID: Int64) {
+        var taskIDs = selectedTaskIDs
+        if taskIDs.remove(taskID) == nil {
+            taskIDs.insert(taskID)
+            selectedTaskID = taskID
+        } else if selectedTaskID == taskID {
+            // Hand the keyboard to the nearest task still selected.
+            let rows = rows
+            let index = rows.firstIndex { $0.id == taskID } ?? 0
+            let after = rows[index...].first { taskIDs.contains($0.id) }
+            let before = rows[..<index].last { taskIDs.contains($0.id) }
+            selectedTaskID = (after ?? before)?.id
+        }
+        selectedTaskIDs = taskIDs
+    }
+
+    /// Shift-click: selects every task from `selectedTaskID` to `taskID`.
+    func extendSelection(to taskID: Int64) {
+        let rows = rows
+        guard let anchorID = selectedTaskID,
+              let anchor = rows.firstIndex(where: { $0.id == anchorID }),
+              let end = rows.firstIndex(where: { $0.id == taskID })
+        else {
+            selectedTaskID = taskID
+            return
+        }
+        selectedTaskIDs = Set(rows[min(anchor, end)...max(anchor, end)].map(\.id))
+        selectionEnd = taskID
+    }
+
+    /// Shift-arrow: grows or shrinks the selected range by a row.
+    func extendSelection(by offset: Int) {
+        let rows = rows
+        guard let endID = selectionEnd ?? selectedTaskID,
+              let current = rows.firstIndex(where: { $0.id == endID })
+        else {
+            moveSelection(by: offset)
+            return
+        }
+        let next = min(max(current + offset, 0), rows.count - 1)
+        extendSelection(to: rows[next].id)
     }
 
     // MARK: - Composer
@@ -259,25 +345,38 @@ final class AppModel {
 
     // MARK: - Task actions
 
+    /// Completes the task, or the selection it belongs to; reopens them if they are all already done.
     func toggleCompleted(_ taskID: Int64? = nil) {
-        guard let taskID = taskID ?? selectedTaskID, let task = task(id: taskID) else { return }
-        let completing = !task.isCompleted
+        toggleCompleted(taskIDs(actingOn: taskID))
+    }
+
+    func toggleCompleted(_ taskIDs: [Int64]) {
+        let tasks = taskIDs.compactMap(task(id:))
+        guard !tasks.isEmpty else { return }
+        let completing = tasks.contains { !$0.isCompleted }
+        let changed = tasks.filter { $0.isCompleted != completing }.map(\.id)
         if completing && !showCompleted {
-            moveSelectionOffRemovedTask(taskID)
+            moveSelectionOffRemovedTasks(changed)
         }
         perform {
-            try repository.setCompleted(id: taskID, completing)
+            for taskID in changed {
+                try repository.setCompleted(id: taskID, completing)
+            }
             if completing {
-                toast = Toast(message: "1 task completed", undo: .reopen(taskID: taskID))
+                let message = changed.count == 1 ? "1 task completed" : "\(changed.count) tasks completed"
+                toast = Toast(message: message, undo: .reopen(taskIDs: changed))
             }
         }
     }
 
-    /// Reschedules a task, keeping its time of day unless `dueDate` brings its own.
+    /// Reschedules a task, or the selection it belongs to, keeping each one's time of day unless `dueDate` brings its own.
     func setDueDate(_ taskID: Int64, _ dueDate: DueDate?) {
-        let existingTime = task(id: taskID)?.dueDate?.time
-        let dueDate = dueDate.map { $0.hasTime ? $0 : $0.withTime(existingTime) }
-        perform { try repository.setDueDate(id: taskID, dueDate) }
+        perform {
+            for taskID in taskIDs(actingOn: taskID) {
+                let existingTime = task(id: taskID)?.dueDate?.time
+                try repository.setDueDate(id: taskID, dueDate.map { $0.hasTime ? $0 : $0.withTime(existingTime) })
+            }
+        }
     }
 
     /// Shows a task, e.g. after its notification is clicked: switches to its project and expands its ancestors.
@@ -303,22 +402,27 @@ final class AppModel {
             reveal(taskID)
         case .complete(let taskID):
             guard task(id: taskID)?.isCompleted == false else { return }
-            moveSelectionOffRemovedTask(taskID)
+            moveSelectionOffRemovedTasks([taskID])
             perform { try repository.setCompleted(id: taskID, true) }
         }
     }
 
+    /// Asks to delete the task, or the selection it belongs to.
     func requestDeletion(_ taskID: Int64? = nil) {
-        guard let taskID = taskID ?? selectedTaskID else { return }
-        taskPendingDeletion = task(id: taskID)
+        tasksPendingDeletion = taskIDs(actingOn: taskID).compactMap(task(id:))
     }
 
-    func confirmDeletion(_ task: TaskItem) {
-        moveSelectionOffRemovedTask(task.id)
-        if composer == .edit(taskID: task.id) {
+    func confirmDeletion(_ tasks: [TaskItem]) {
+        let taskIDs = tasks.map(\.id)
+        moveSelectionOffRemovedTasks(taskIDs)
+        if case .edit(let editingID) = composer, taskIDs.contains(editingID) {
             composer = nil
         }
-        perform { try repository.deleteTask(id: task.id) }
+        perform {
+            for taskID in taskIDs {
+                try repository.deleteTask(id: taskID)
+            }
+        }
     }
 
     func indent(_ taskID: Int64? = nil) {
@@ -336,13 +440,21 @@ final class AppModel {
         perform { try repository.move(id: taskID, by: offset) }
     }
 
-    func move(_ taskID: Int64, toProject project: Project) {
-        if task(id: taskID)?.projectID != project.id {
-            moveSelectionOffRemovedTask(taskID)
+    /// Moves tasks, with their subtasks, to the end of another project, keeping their order.
+    /// Returns `false` if they were all already there.
+    @discardableResult
+    func move(_ taskIDs: [Int64], toProject project: Project) -> Bool {
+        let taskIDs = topmost(taskIDs).filter { task(id: $0).map { $0.projectID != project.id } ?? false }
+        guard !taskIDs.isEmpty else { return false }
+        if project.id != selectedProjectID {
+            moveSelectionOffRemovedTasks(taskIDs)
         }
-        perform {
-            try repository.moveTask(id: taskID, toProject: project.id)
-            toast = Toast(message: "Task moved to \(project.name)")
+        return perform {
+            for taskID in taskIDs {
+                try repository.moveTask(id: taskID, toProject: project.id)
+            }
+            let tasks = taskIDs.count == 1 ? "Task" : "\(taskIDs.count) tasks"
+            toast = Toast(message: "\(tasks) moved to \(project.name)")
         }
     }
 
@@ -368,8 +480,12 @@ final class AppModel {
 
     func performUndo(for toast: Toast) {
         switch toast.undo {
-        case .reopen(let taskID):
-            perform { try repository.setCompleted(id: taskID, false) }
+        case .reopen(let taskIDs):
+            perform {
+                for taskID in taskIDs {
+                    try repository.setCompleted(id: taskID, false)
+                }
+            }
         case nil:
             break
         }
@@ -426,6 +542,8 @@ final class AppModel {
         }
         if let selectedTaskID, task(id: selectedTaskID) == nil {
             self.selectedTaskID = nil
+        } else {
+            selectedTaskIDs = selectedTaskIDs.filter { task(id: $0) != nil }
         }
         if case .edit(let taskID) = composer, task(id: taskID) == nil {
             composer = nil
@@ -476,14 +594,28 @@ final class AppModel {
         }
     }
 
-    /// Before a task disappears from the list, select the row after its subtree (or the one before).
-    private func moveSelectionOffRemovedTask(_ taskID: Int64) {
-        guard selectedTaskID == taskID else { return }
+    /// Before tasks disappear from the list, if any of them (or their subtasks) are selected,
+    /// select the first row left after the selected task instead (or the last one before it).
+    private func moveSelectionOffRemovedTasks(_ taskIDs: [Int64]) {
         let rows = rows
-        guard let index = rows.firstIndex(where: { $0.id == taskID }) else { return }
-        let depth = rows[index].depth
-        let after = rows[(index + 1)...].first { $0.depth <= depth }
-        let before = index > 0 ? rows[index - 1] : nil
+        var removed: Set<Int64> = []
+        var removedSubtreeDepth: Int?
+        for row in rows {
+            if let depth = removedSubtreeDepth, row.depth > depth {
+                removed.insert(row.id)
+                continue
+            }
+            removedSubtreeDepth = nil
+            if taskIDs.contains(row.id) {
+                removed.insert(row.id)
+                removedSubtreeDepth = row.depth
+            }
+        }
+        guard !selectedTaskIDs.isDisjoint(with: removed),
+              let index = rows.firstIndex(where: { $0.id == selectedTaskID })
+        else { return }
+        let after = rows[index...].first { !removed.contains($0.id) }
+        let before = rows[..<index].last { !removed.contains($0.id) }
         selectedTaskID = (after ?? before)?.id
     }
 }

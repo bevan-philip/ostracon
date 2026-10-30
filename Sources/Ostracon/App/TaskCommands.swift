@@ -13,7 +13,7 @@ struct TaskCommands: Commands {
                 .disabled(model.selectedProject == nil)
             Button("New Subtask") { model.startAddingSubtask() }
                 .keyboardShortcut("n", modifiers: [.command, .option])
-                .disabled(!canActOnSelection)
+                .disabled(!canActOnSingleTask)
             Button("New Project…", action: model.startCreatingProject)
                 .keyboardShortcut("n", modifiers: [.command, .shift])
         }
@@ -24,22 +24,22 @@ struct TaskCommands: Commands {
                 .disabled(!canActOnSelection)
             Button("Edit") { model.startEditing() }
                 .keyboardShortcut("e")
-                .disabled(!canActOnSelection)
+                .disabled(!canActOnSingleTask)
 
             Divider()
 
             Button("Indent") { model.indent() }
                 .keyboardShortcut("]")
-                .disabled(!canActOnSelection)
+                .disabled(!canActOnSingleTask)
             Button("Outdent") { model.outdent() }
                 .keyboardShortcut("[")
-                .disabled(!canActOnSelection)
+                .disabled(!canActOnSingleTask)
             Button("Move Up") { model.move(by: -1) }
                 .keyboardShortcut(.upArrow, modifiers: [.command, .option])
-                .disabled(!canActOnSelection)
+                .disabled(!canActOnSingleTask)
             Button("Move Down") { model.move(by: 1) }
                 .keyboardShortcut(.downArrow, modifiers: [.command, .option])
-                .disabled(!canActOnSelection)
+                .disabled(!canActOnSingleTask)
 
             Divider()
 
@@ -60,8 +60,13 @@ struct TaskCommands: Commands {
         }
     }
 
-    /// Task actions apply to the selected task, and are off while the composer has the keyboard.
+    /// Task actions apply to the selected tasks, and are off while the composer has the keyboard.
     private var canActOnSelection: Bool {
         model.selectedTaskID != nil && model.composer == nil
+    }
+
+    /// Editing and outlining need exactly one task selected.
+    private var canActOnSingleTask: Bool {
+        canActOnSelection && !model.hasMultipleSelection
     }
 }

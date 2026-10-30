@@ -1,3 +1,4 @@
+import AppKit
 import OstraconCore
 import SwiftUI
 
@@ -22,7 +23,7 @@ struct TaskListView: View {
 
                     LazyVStack(alignment: .leading, spacing: Theme.taskSpacing) {
                         ForEach(groups) { group in
-                            TaskCard(group: group, selectedTaskID: model.selectedTaskID, onSelect: select)
+                            TaskCard(group: group, selectedTaskIDs: model.selectedTaskIDs, onSelect: select)
                                 .transition(.opacity)
                         }
                     }
@@ -74,10 +75,18 @@ struct TaskListView: View {
             }
         }
         .animation(.snappy(duration: 0.25), value: model.toast)
-        .confirmationDialog("Delete Task?", item: $model.taskPendingDeletion) { task in
-            Button("Delete", role: .destructive) { model.confirmDeletion(task) }
-        } message: { task in
-            Text("“\(task.content)” and any subtasks will be permanently deleted.")
+        .confirmationDialog(
+            deletionTitle,
+            isPresented: isConfirmingDeletion,
+            presenting: model.tasksPendingDeletion
+        ) { tasks in
+            Button("Delete", role: .destructive) { model.confirmDeletion(tasks) }
+        } message: { tasks in
+            if let task = tasks.first, tasks.count == 1 {
+                Text("“\(task.content)” and any subtasks will be permanently deleted.")
+            } else {
+                Text("These \(tasks.count) tasks and any subtasks will be permanently deleted.")
+            }
         }
         .navigationTitle(model.selectedProject?.name ?? "Ostracon")
         .modifier(HeaderReplacesToolbarTitle())
@@ -95,9 +104,34 @@ struct TaskListView: View {
         }
     }
 
+    private var deletionTitle: String {
+        let count = model.tasksPendingDeletion.count
+        return count > 1 ? String(localized: "Delete \(count) Tasks?") : String(localized: "Delete Task?")
+    }
+
+    private var isConfirmingDeletion: Binding<Bool> {
+        Binding {
+            !model.tasksPendingDeletion.isEmpty
+        } set: { isPresented in
+            if !isPresented { model.tasksPendingDeletion = [] }
+        }
+    }
+
+    /// A click on a row: Command adds or removes it from the selection, Shift selects a range to it.
     private func select(_ taskID: Int64) {
+        // A double-click's clicks arrive here as well as opening the editor;
+        // closing it or taking the keyboard back would undo the double-click.
+        guard model.composer != .edit(taskID: taskID) else { return }
         model.closeComposer()
-        model.selectedTaskID = taskID
+        // The click's own modifiers, rather than the keyboard's state by the time the tap is recognised.
+        let modifiers = NSApp.currentEvent?.modifierFlags ?? NSEvent.modifierFlags
+        if modifiers.contains(.command) {
+            model.toggleSelection(of: taskID)
+        } else if modifiers.contains(.shift) {
+            model.extendSelection(to: taskID)
+        } else {
+            model.selectedTaskID = taskID
+        }
         isListFocused = true
     }
 
@@ -105,21 +139,27 @@ struct TaskListView: View {
     private func handleKeyPress(_ press: KeyPress) -> KeyPress.Result {
         guard model.composer == nil, !press.modifiers.contains(.command) else { return .ignored }
         let hasSelection = model.selectedTaskID != nil
+        // Editing and outlining work on one task at a time.
+        let hasSingleSelection = hasSelection && !model.hasMultipleSelection
 
         switch press.key {
+        case .upArrow where press.modifiers.contains(.shift):
+            model.extendSelection(by: -1)
+        case .downArrow where press.modifiers.contains(.shift):
+            model.extendSelection(by: 1)
         case .upArrow:
             model.moveSelection(by: -1)
         case .downArrow:
             model.moveSelection(by: 1)
-        case .leftArrow where hasSelection:
+        case .leftArrow where hasSingleSelection:
             model.collapseOrSelectParent()
-        case .rightArrow where hasSelection:
+        case .rightArrow where hasSingleSelection:
             model.expandSelected()
-        case .return where hasSelection:
+        case .return where hasSingleSelection:
             model.startEditing()
         case .space where hasSelection:
             model.toggleCompleted()
-        case .tab where hasSelection:
+        case .tab where hasSingleSelection:
             if press.modifiers.contains(.shift) { model.outdent() } else { model.indent() }
         case .delete where hasSelection, .deleteForward where hasSelection:
             model.requestDeletion()
@@ -130,8 +170,8 @@ struct TaskListView: View {
             case "j": model.moveSelection(by: 1)
             case "k": model.moveSelection(by: -1)
             case "a", "q": model.startAddingTask()
-            case "A" where hasSelection: model.startAddingSubtask()
-            case "\u{19}" where hasSelection: model.outdent() // Shift-Tab arrives as "back tab"
+            case "A" where hasSingleSelection: model.startAddingSubtask()
+            case "\u{19}" where hasSingleSelection: model.outdent() // Shift-Tab arrives as "back tab"
             default: return .ignored
             }
         }

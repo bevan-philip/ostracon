@@ -146,6 +146,82 @@ struct AppModelTests {
         #expect(model.toast == nil)
     }
 
+    @Test func commandAndShiftClicksBuildASelection() throws {
+        for name in ["A", "B", "C", "D"] {
+            model.submitComposer(mode: .add(parentID: nil), text: name, details: "", projectID: inboxID)
+        }
+        let ids = model.rows.map(\.id)
+
+        model.selectedTaskID = ids[0]
+        model.toggleSelection(of: ids[2])
+        #expect(model.selectedTaskIDs == [ids[0], ids[2]])
+        #expect(model.selectedTaskID == ids[2], "The task just added has the keyboard")
+
+        model.toggleSelection(of: ids[2])
+        #expect(model.selectedTaskIDs == [ids[0]])
+        #expect(model.selectedTaskID == ids[0], "Removing the keyboard's task hands it to one still selected")
+
+        model.extendSelection(to: ids[2])
+        #expect(model.selectedTaskIDs == Set(ids[0...2]))
+        model.extendSelection(by: 1)
+        #expect(model.selectedTaskIDs == Set(ids), "Shift-arrow grows the range from its far end")
+        model.extendSelection(by: -3)
+        #expect(model.selectedTaskIDs == [ids[0]])
+
+        model.extendSelection(to: ids[1])
+        model.moveSelection(by: 1)
+        #expect(model.selectedTaskIDs == [ids[1]], "A plain arrow collapses the selection")
+    }
+
+    @Test func movingASelectionKeepsOrderAndSubtasks() throws {
+        let work = try createProject("Work")
+        for name in ["A", "A1", "B", "C"] {
+            model.submitComposer(mode: .add(parentID: nil), text: name, details: "", projectID: inboxID)
+        }
+        model.indent(model.rows[1].id)
+        let ids = model.rows.map(\.id)
+        #expect(contents == ["A", "  A1", "B", "C"])
+
+        model.selectedTaskID = ids[2]
+        model.extendSelection(to: ids[0])
+        #expect(model.taskIDs(actingOn: ids[1]) == [ids[0], ids[2]], "A1 travels with A, not on its own")
+        #expect(model.taskIDs(actingOn: ids[3]) == [ids[3]], "A task outside the selection acts alone")
+
+        #expect(model.move(model.taskIDs(actingOn: ids[0]), toProject: work))
+        #expect(contents == ["C"])
+        #expect(model.selectedTaskID == ids[3])
+        #expect(model.toast?.message == "2 tasks moved to Work")
+
+        model.select(project: work)
+        #expect(contents == ["A", "  A1", "B"])
+        #expect(!model.move([ids[0]], toProject: work), "Dropping tasks on their own project does nothing")
+    }
+
+    @Test func completingAndDeletingASelection() throws {
+        for name in ["A", "B", "C"] {
+            model.submitComposer(mode: .add(parentID: nil), text: name, details: "", projectID: inboxID)
+        }
+        let ids = model.rows.map(\.id)
+        model.selectedTaskID = ids[0]
+        model.toggleSelection(of: ids[2])
+
+        model.toggleCompleted()
+        #expect(contents == ["B"])
+        #expect(model.selectedTaskID == ids[1])
+        let toast = try #require(model.toast)
+        #expect(toast.message == "2 tasks completed")
+        model.performUndo(for: toast)
+        #expect(contents == ["A", "B", "C"])
+
+        model.selectedTaskID = ids[1]
+        model.extendSelection(to: ids[2])
+        model.requestDeletion()
+        #expect(model.tasksPendingDeletion.map(\.id) == [ids[1], ids[2]])
+        model.confirmDeletion(model.tasksPendingDeletion)
+        #expect(contents == ["A"])
+        #expect(model.selectedTaskID == ids[0])
+    }
+
     @Test func deletingSelectedProjectReturnsToInbox() throws {
         let work = try createProject("Work")
         model.select(project: work)
