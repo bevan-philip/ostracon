@@ -17,7 +17,10 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_27.2.app
+        # Without SDKROOT, xcrun on this image looks for a Command Line Tools SDK that isn't installed.
+        run: |
+          sudo xcode-select -s /Applications/Xcode_27.2.app
+          echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> "$GITHUB_ENV"
 
       - name: Test
         run: swift test
