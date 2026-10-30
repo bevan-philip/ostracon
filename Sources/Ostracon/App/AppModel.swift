@@ -7,6 +7,7 @@ import OstraconCore
 @MainActor
 final class AppModel {
     private let repository: TaskRepository
+    private let reminderScheduler: ReminderScheduling?
 
     private(set) var projects: [Project] = []
     private(set) var tasks: [TaskItem] = []
@@ -24,21 +25,26 @@ final class AppModel {
     var toast: Toast?
     var errorMessage: String?
 
-    init(repository: TaskRepository) {
+    init(repository: TaskRepository, reminderScheduler: ReminderScheduling? = nil) {
         self.repository = repository
+        self.reminderScheduler = reminderScheduler
         reload()
         selectedProjectID = projects.first?.id
+        reminderScheduler?.onResponse = { [weak self] response in
+            self?.handle(response)
+        }
     }
 
     /// Opens the on-disk database, falling back to a temporary in-memory one if that fails.
     static func makeDefault() -> AppModel {
+        let notifier = ReminderNotifier.makeIfAvailable()
         do {
-            return try AppModel(repository: .openDefault())
+            return try AppModel(repository: .openDefault(), reminderScheduler: notifier)
         } catch {
             guard let fallback = try? TaskRepository.inMemory() else {
                 fatalError("Unable to create even an in-memory SQLite database: \(error)")
             }
-            let model = AppModel(repository: fallback)
+            let model = AppModel(repository: fallback, reminderScheduler: notifier)
             model.errorMessage = "Couldn't open your saved tasks (\(error.localizedDescription)). Changes this session won't be saved."
             return model
         }
@@ -131,6 +137,11 @@ final class AppModel {
         projects.first { $0.id == id }
     }
 
+    /// Notifications are turned off for the app, so reminders won't appear.
+    var areRemindersBlocked: Bool {
+        reminderScheduler?.isBlocked ?? false
+    }
+
     // MARK: - Navigation
 
     func select(project: Project) {
@@ -180,27 +191,62 @@ final class AppModel {
         composer = nil
     }
 
+    /// What the composer's draft would save, counting words not yet turned into blocks.
+    func composerResult(for draft: QuickAddDraft, now: Date = .now) -> QuickAddResult {
+        let dates = DateParser(now: now)
+        return draft.converted(projects: projects, dates: dates, includingTrailing: true).result(dates: dates)
+    }
+
+    /// Saves plain composer text, as if it had been typed and submitted.
+    @discardableResult
+    func submitComposer(
+        mode: ComposerMode,
+        text: String,
+        details: String,
+        projectID: Int64,
+        dueDate: DueDate? = nil,
+        reminders: [Reminder] = []
+    ) -> Bool {
+        submitComposer(
+            mode: mode, draft: QuickAddDraft(text: text), details: details,
+            projectID: projectID, dueDate: dueDate, reminders: reminders
+        )
+    }
+
     /// Saves the composer's contents. Returns `true` on success.
     ///
-    /// `text` may contain a `#Project` token, which overrides `projectID`.
+    /// A project block in `draft` overrides `projectID`, a date block overrides `dueDate`,
+    /// and reminder blocks are added to `reminders`.
     @discardableResult
-    func submitComposer(mode: ComposerMode, text: String, details: String, projectID: Int64) -> Bool {
-        let parsed = QuickAddParser.parse(text, projects: projects)
+    func submitComposer(
+        mode: ComposerMode,
+        draft: QuickAddDraft,
+        details: String,
+        projectID: Int64,
+        dueDate: DueDate? = nil,
+        reminders: [Reminder] = []
+    ) -> Bool {
+        let parsed = composerResult(for: draft)
         guard !parsed.content.isEmpty else { return false }
         let targetProjectID = parsed.projectID ?? projectID
         let details = details.trimmingCharacters(in: .whitespacesAndNewlines)
+        let dueDate = parsed.dueDate ?? dueDate
+        let reminders = reminders + parsed.reminders
 
         return perform {
             switch mode {
             case .add(let parentID):
                 try repository.addTask(
-                    content: parsed.content, details: details, projectID: targetProjectID, parentID: parentID
+                    content: parsed.content, details: details, projectID: targetProjectID, parentID: parentID,
+                    dueDate: dueDate, reminders: reminders
                 )
                 if targetProjectID != selectedProjectID, let project = project(id: targetProjectID) {
                     toast = Toast(message: "Task added to \(project.name)")
                 }
             case .edit(let taskID):
                 try repository.updateTask(id: taskID, content: parsed.content, details: details)
+                try repository.setDueDate(id: taskID, dueDate)
+                try repository.setReminders(id: taskID, reminders)
                 try repository.moveTask(id: taskID, toProject: targetProjectID)
                 composer = nil
                 if targetProjectID != selectedProjectID, let project = project(id: targetProjectID) {
@@ -224,6 +270,41 @@ final class AppModel {
             if completing {
                 toast = Toast(message: "1 task completed", undo: .reopen(taskID: taskID))
             }
+        }
+    }
+
+    /// Reschedules a task, keeping its time of day unless `dueDate` brings its own.
+    func setDueDate(_ taskID: Int64, _ dueDate: DueDate?) {
+        let existingTime = task(id: taskID)?.dueDate?.time
+        let dueDate = dueDate.map { $0.hasTime ? $0 : $0.withTime(existingTime) }
+        perform { try repository.setDueDate(id: taskID, dueDate) }
+    }
+
+    /// Shows a task, e.g. after its notification is clicked: switches to its project and expands its ancestors.
+    func reveal(_ taskID: Int64) {
+        guard let task = task(id: taskID), let project = project(id: task.projectID) else { return }
+        select(project: project)
+        var ancestorID = task.parentID
+        while let id = ancestorID, let ancestor = self.task(id: id) {
+            if ancestor.isCollapsed {
+                setCollapsed(id, false)
+            }
+            ancestorID = ancestor.parentID
+        }
+        if task.isCompleted {
+            showCompleted = true
+        }
+        selectedTaskID = taskID
+    }
+
+    func handle(_ response: ReminderResponse) {
+        switch response {
+        case .open(let taskID):
+            reveal(taskID)
+        case .complete(let taskID):
+            guard task(id: taskID)?.isCompleted == false else { return }
+            moveSelectionOffRemovedTask(taskID)
+            perform { try repository.setCompleted(id: taskID, true) }
         }
     }
 
@@ -343,6 +424,28 @@ final class AppModel {
         } catch {
             errorMessage = error.localizedDescription
         }
+        scheduleReminders()
+    }
+
+    /// Hands the upcoming reminders to the notifier. Cheap when nothing has changed.
+    func scheduleReminders(now: Date = .now) {
+        guard let reminderScheduler else { return }
+        let tasksByID = Dictionary(uniqueKeysWithValues: tasks.map { ($0.id, $0) })
+        let notifications = ReminderSchedule.upcoming(for: tasks, after: now).compactMap { scheduled -> ReminderNotification? in
+            guard let task = tasksByID[scheduled.taskID] else { return nil }
+            var details: [String] = []
+            if let due = task.dueDate {
+                details.append(String(localized: "Due \(DueDateFormatter.string(for: due, now: scheduled.fireDate))"))
+            }
+            if let project = project(id: task.projectID) {
+                details.append(project.name)
+            }
+            return ReminderNotification(
+                identifier: scheduled.identifier, taskID: task.id, fireDate: scheduled.fireDate,
+                title: task.content, body: details.joined(separator: " · ")
+            )
+        }
+        reminderScheduler.schedule(notifications)
     }
 
     /// Runs a repository change, reloads, and surfaces any error. Returns `true` on success.

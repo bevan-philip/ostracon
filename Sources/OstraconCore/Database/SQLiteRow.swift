@@ -25,6 +25,10 @@ public struct SQLiteRow {
         int(column) != 0
     }
 
+    public func optionalText(_ column: Int32) -> String? {
+        sqlite3_column_type(statement.pointer, column) == SQLITE_NULL ? nil : text(column)
+    }
+
     public func text(_ column: Int32) -> String {
         guard let cString = sqlite3_column_text(statement.pointer, column) else { return "" }
         return String(cString: cString)

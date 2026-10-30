@@ -25,6 +25,16 @@ enum Schema {
         );
         CREATE INDEX tasks_project ON tasks(project_id);
         CREATE INDEX tasks_parent ON tasks(parent_id);
+        """,
+        """
+        ALTER TABLE tasks ADD COLUMN due TEXT;
+        CREATE TABLE reminders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+            fire_at REAL,
+            minutes_before INTEGER
+        );
+        CREATE INDEX reminders_task ON reminders(task_id);
         """
     ]
 

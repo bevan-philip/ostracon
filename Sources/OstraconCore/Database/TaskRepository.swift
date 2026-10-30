@@ -78,15 +78,17 @@ public final class TaskRepository {
 
     /// Every task, in sibling order.
     public func tasks() throws -> [TaskItem] {
-        try database.query(
+        let reminders = try remindersByTask()
+        return try database.query(
             """
             SELECT id, project_id, parent_id, content, details, is_completed, completed_at,
-                   sort_order, is_collapsed, created_at
+                   sort_order, is_collapsed, created_at, due
             FROM tasks ORDER BY sort_order, id
             """
         ) { row in
-            TaskItem(
-                id: row.int(0),
+            let id = row.int(0)
+            return TaskItem(
+                id: id,
                 projectID: row.int(1),
                 parentID: row.optionalInt(2),
                 content: row.text(3),
@@ -95,7 +97,9 @@ public final class TaskRepository {
                 completedAt: row.optionalDouble(6).map(Date.init(timeIntervalSince1970:)),
                 sortOrder: Int(row.int(7)),
                 isCollapsed: row.bool(8),
-                createdAt: Date(timeIntervalSince1970: row.double(9))
+                createdAt: Date(timeIntervalSince1970: row.double(9)),
+                dueDate: row.optionalText(10).flatMap(DueDate.init(storageValue:)),
+                reminders: reminders[id] ?? []
             )
         }
     }
@@ -108,7 +112,14 @@ public final class TaskRepository {
     ///
     /// If `parentID` belongs to a different project, the task is added at the top level of `projectID` instead.
     @discardableResult
-    public func addTask(content: String, details: String = "", projectID: Int64, parentID: Int64? = nil) throws -> TaskItem {
+    public func addTask(
+        content: String,
+        details: String = "",
+        projectID: Int64,
+        parentID: Int64? = nil,
+        dueDate: DueDate? = nil,
+        reminders: [Reminder] = []
+    ) throws -> TaskItem {
         let content = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty else { throw RepositoryError.emptyName }
 
@@ -119,17 +130,23 @@ public final class TaskRepository {
 
         let order = try nextSiblingOrder(projectID: projectID, parentID: parentID)
         let now = Date.now
-        try database.run(
-            """
-            INSERT INTO tasks (project_id, parent_id, content, details, sort_order, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            .integer(projectID), .optional(parentID), .text(content), .text(details),
-            .integer(Int64(order)), .real(now.timeIntervalSince1970)
-        )
+        let id = try database.transaction {
+            try database.run(
+                """
+                INSERT INTO tasks (project_id, parent_id, content, details, sort_order, created_at, due)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                .integer(projectID), .optional(parentID), .text(content), .text(details),
+                .integer(Int64(order)), .real(now.timeIntervalSince1970), .optional(dueDate?.storageValue)
+            )
+            let id = database.lastInsertRowID
+            try insertReminders(reminders, taskID: id)
+            return id
+        }
         return TaskItem(
-            id: database.lastInsertRowID, projectID: projectID, parentID: parentID, content: content,
-            details: details, isCompleted: false, completedAt: nil, sortOrder: order, isCollapsed: false, createdAt: now
+            id: id, projectID: projectID, parentID: parentID, content: content, details: details,
+            isCompleted: false, completedAt: nil, sortOrder: order, isCollapsed: false, createdAt: now,
+            dueDate: dueDate, reminders: Reminder.sorted(reminders)
         )
     }
 
@@ -140,6 +157,18 @@ public final class TaskRepository {
             "UPDATE tasks SET content = ?, details = ? WHERE id = ?",
             .text(content), .text(details), .integer(id)
         )
+    }
+
+    public func setDueDate(id: Int64, _ dueDate: DueDate?) throws {
+        try database.run("UPDATE tasks SET due = ? WHERE id = ?", .optional(dueDate?.storageValue), .integer(id))
+    }
+
+    /// Replaces all of a task's reminders.
+    public func setReminders(id: Int64, _ reminders: [Reminder]) throws {
+        try database.transaction {
+            try database.run("DELETE FROM reminders WHERE task_id = ?", .integer(id))
+            try insertReminders(reminders, taskID: id)
+        }
     }
 
     /// Moves a task, with its subtasks, to the end of another project's top level.
@@ -251,6 +280,37 @@ public final class TaskRepository {
                 "INSERT INTO projects (name, color, sort_order, is_inbox) VALUES ('Inbox', ?, 0, 1)",
                 .text(ProjectColor.blue.rawValue)
             )
+        }
+    }
+
+    private func remindersByTask() throws -> [Int64: [Reminder]] {
+        let pairs = try database.query("SELECT task_id, fire_at, minutes_before FROM reminders") { row -> (Int64, Reminder)? in
+            if let fireAt = row.optionalDouble(1) {
+                return (row.int(0), .at(Date(timeIntervalSince1970: fireAt)))
+            }
+            if let minutes = row.optionalInt(2) {
+                return (row.int(0), .before(minutes: Int(minutes)))
+            }
+            return nil
+        }
+        return Dictionary(grouping: pairs.compactMap(\.self), by: \.0).mapValues { Reminder.sorted($0.map(\.1)) }
+    }
+
+    /// Adds reminders to a task, skipping duplicates.
+    private func insertReminders(_ reminders: [Reminder], taskID: Int64) throws {
+        for reminder in Set(reminders) {
+            switch reminder {
+            case .at(let date):
+                try database.run(
+                    "INSERT INTO reminders (task_id, fire_at) VALUES (?, ?)",
+                    .integer(taskID), .real(date.timeIntervalSince1970)
+                )
+            case .before(let minutes):
+                try database.run(
+                    "INSERT INTO reminders (task_id, minutes_before) VALUES (?, ?)",
+                    .integer(taskID), .integer(Int64(minutes))
+                )
+            }
         }
     }
 

@@ -142,4 +142,40 @@ struct TaskRepositoryTests {
         #expect(try second.projects().last?.color == .grape)
         #expect(try second.tasks().map(\.content) == ["Persisted"])
     }
+
+    @Test func dueDatesAndRemindersRoundTrip() throws {
+        let due = DueDate(year: 2026, month: 11, day: 6, time: TimeOfDay(hour: 15, minute: 30))
+        let moment = Date(timeIntervalSince1970: 1_800_000_000)
+        let task = try repository.addTask(
+            content: "Dentist", projectID: inbox.id, dueDate: due,
+            reminders: [.before(minutes: 30), .at(moment), .before(minutes: 30)]
+        )
+        var loaded = try #require(try repository.task(id: task.id))
+        #expect(loaded.dueDate == due)
+        #expect(loaded.reminders == [.at(moment), .before(minutes: 30)], "Duplicates are dropped, absolute first")
+
+        try repository.setDueDate(id: task.id, DueDate(year: 2026, month: 12, day: 1))
+        try repository.setReminders(id: task.id, [.before(minutes: 5)])
+        loaded = try #require(try repository.task(id: task.id))
+        #expect(loaded.dueDate == DueDate(year: 2026, month: 12, day: 1))
+        #expect(loaded.reminders == [.before(minutes: 5)])
+
+        try repository.setDueDate(id: task.id, nil)
+        #expect(try repository.task(id: task.id)?.dueDate == nil)
+    }
+
+    @Test func deletingTaskDeletesItsReminders() throws {
+        let task = try repository.addTask(content: "Remind me", projectID: inbox.id, reminders: [.before(minutes: 10)])
+        try repository.deleteTask(id: task.id)
+        let other = try repository.addTask(content: "Other", projectID: inbox.id)
+        #expect(try repository.task(id: other.id)?.reminders == [])
+    }
+
+    @Test func dueDateStorageFormat() {
+        #expect(DueDate(year: 2026, month: 1, day: 5).storageValue == "2026-01-05")
+        let timed = DueDate(year: 2026, month: 1, day: 5, time: TimeOfDay(hour: 9, minute: 5))
+        #expect(timed.storageValue == "2026-01-05T09:05")
+        #expect(DueDate(storageValue: "2026-01-05T09:05") == timed)
+        #expect(DueDate(storageValue: "nonsense") == nil)
+    }
 }

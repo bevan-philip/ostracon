@@ -12,6 +12,17 @@ struct TaskMenuItems: View {
         Button("Edit") { model.startEditing(task.id) }
         Button("Add Subtask") { model.startAddingSubtask(to: task.id) }
 
+        Menu("Due Date") {
+            ForEach(DueDateShortcut.allCases) { shortcut in
+                Button(shortcut.title, systemImage: shortcut.systemImage) {
+                    model.setDueDate(task.id, shortcut.dueDate())
+                }
+            }
+            Divider()
+            Button("Remove Due Date") { model.setDueDate(task.id, nil) }
+                .disabled(task.dueDate == nil)
+        }
+
         Divider()
 
         Button("Indent") { model.indent(task.id) }

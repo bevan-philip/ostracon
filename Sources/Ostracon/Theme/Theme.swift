@@ -26,6 +26,21 @@ enum Theme {
         Color(hex: projectColor.hex)
     }
 
+    /// Todoist's due-date colours: red when overdue, green today, orange tomorrow, purple this week.
+    static func style(for urgency: DueUrgency) -> AnyShapeStyle {
+        urgency == .later ? AnyShapeStyle(.secondary) : AnyShapeStyle(color(for: urgency))
+    }
+
+    static func color(for urgency: DueUrgency) -> Color {
+        switch urgency {
+        case .overdue: .red
+        case .today: .green
+        case .tomorrow: .orange
+        case .thisWeek: .purple
+        case .later: .gray
+        }
+    }
+
     /// The colour a project's page is tinted with.
     static func tint(for project: Project) -> Color {
         project.isInbox ? inboxColor : color(for: project.color)

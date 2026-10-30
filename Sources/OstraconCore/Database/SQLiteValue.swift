@@ -15,6 +15,10 @@ public enum SQLiteValue: Sendable {
         value.map(SQLiteValue.real) ?? .null
     }
 
+    public static func optional(_ value: String?) -> SQLiteValue {
+        value.map(SQLiteValue.text) ?? .null
+    }
+
     public static func bool(_ value: Bool) -> SQLiteValue {
         .integer(value ? 1 : 0)
     }

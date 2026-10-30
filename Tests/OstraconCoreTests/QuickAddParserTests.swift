@@ -38,7 +38,7 @@ struct QuickAddParserTests {
 
     @Test func lastHashtagWins() {
         let result = QuickAddParser.parse("Call #Home #Work", projects: projects)
-        #expect(result == QuickAddResult(content: "Call", projectID: 2))
+        #expect(result == QuickAddResult(content: "Call #Home", projectID: 2), "The earlier project goes back to being text")
     }
 
     @Test func activeQueryTracksTrailingHashtag() {

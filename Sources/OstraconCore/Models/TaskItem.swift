@@ -12,6 +12,8 @@ public struct TaskItem: Identifiable, Hashable, Sendable {
     public var sortOrder: Int
     public var isCollapsed: Bool
     public var createdAt: Date
+    public var dueDate: DueDate?
+    public var reminders: [Reminder]
 
     public init(
         id: Int64,
@@ -23,7 +25,9 @@ public struct TaskItem: Identifiable, Hashable, Sendable {
         completedAt: Date?,
         sortOrder: Int,
         isCollapsed: Bool,
-        createdAt: Date
+        createdAt: Date,
+        dueDate: DueDate? = nil,
+        reminders: [Reminder] = []
     ) {
         self.id = id
         self.projectID = projectID
@@ -35,5 +39,7 @@ public struct TaskItem: Identifiable, Hashable, Sendable {
         self.sortOrder = sortOrder
         self.isCollapsed = isCollapsed
         self.createdAt = createdAt
+        self.dueDate = dueDate
+        self.reminders = reminders
     }
 }

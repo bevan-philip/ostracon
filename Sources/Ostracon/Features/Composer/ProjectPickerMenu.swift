@@ -23,7 +23,7 @@ struct ProjectPickerMenu: View {
                 }
             }
         } label: {
-            HStack(spacing: 4) {
+            ComposerChipLabel(isHighlighted: isFromHashtag) {
                 if let selected {
                     ProjectIcon(project: selected)
                     Text(selected.name)
@@ -32,13 +32,6 @@ struct ProjectPickerMenu: View {
                     .imageScale(.small)
                     .foregroundStyle(.secondary)
             }
-            .font(.callout)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                isFromHashtag ? AnyShapeStyle(.tint.quaternary) : AnyShapeStyle(.fill.tertiary),
-                in: .capsule
-            )
         }
         .menuStyle(.button)
         .buttonStyle(.plain)

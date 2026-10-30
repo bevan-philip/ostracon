@@ -30,8 +30,15 @@ struct TaskRowView: View {
                         .foregroundStyle(task.isCompleted ? .tertiary : .secondary)
                         .lineLimit(2)
                 }
-                if SubtaskSummary.hasContent(for: row) {
-                    SubtaskSummary(row: row, isShowingCompleted: model.showCompleted)
+                if TaskDueLabel.hasContent(for: task) || SubtaskSummary.hasContent(for: row) {
+                    HStack(spacing: 12) {
+                        if TaskDueLabel.hasContent(for: task) {
+                            TaskDueLabel(task: task)
+                        }
+                        if SubtaskSummary.hasContent(for: row) {
+                            SubtaskSummary(row: row, isShowingCompleted: model.showCompleted)
+                        }
+                    }
                 }
             }
 

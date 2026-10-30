@@ -1,14 +1,20 @@
 import Foundation
 
-/// Parses Todoist-style quick-add text, where `#Project Name` files a task into a project.
+/// Parses Todoist-style quick-add text, where `#Project Name` files a task into a project,
+/// and dates and `!reminders` are picked out by `DateParser`.
 public enum QuickAddParser {
-    /// Strips any `#Project` tokens that name an existing project.
-    /// If several are present, the last one wins.
-    public static func parse(_ text: String, projects: [Project]) -> QuickAddResult {
-        // Longest names first, so "#Work Admin" beats "#Work".
+    /// Reads a whole piece of text as if it had been typed into the composer and submitted.
+    /// Pass `dates: nil` to recognise projects only.
+    public static func parse(_ text: String, projects: [Project], dates: DateParser? = DateParser()) -> QuickAddResult {
+        var draft = QuickAddDraft(text: text)
+        draft.convert(projects: projects, dates: dates, includingTrailing: true)
+        return draft.result(dates: dates ?? DateParser())
+    }
+
+    /// `#Project` tokens naming an existing project, preferring the longest name, so "#Work Admin" beats "#Work".
+    static func projectMatches(in text: String, projects: [Project]) -> [(range: Range<String.Index>, project: Project)] {
         let candidates = projects.sorted { $0.name.count > $1.name.count }
         var matches: [(range: Range<String.Index>, project: Project)] = []
-
         for hashIndex in hashTokenStarts(in: text) {
             let nameStart = text.index(after: hashIndex)
             let remainder = text[nameStart...]
@@ -21,13 +27,7 @@ public enum QuickAddParser {
                 }
             }
         }
-
-        var content = text
-        for match in matches.reversed() {
-            content.removeSubrange(match.range)
-        }
-        let normalised = content.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        return QuickAddResult(content: normalised, projectID: matches.last?.project.id)
+        return matches
     }
 
     /// The partial project name being typed after a trailing `#`, if any, used to drive autocomplete.
