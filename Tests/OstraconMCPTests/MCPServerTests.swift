@@ -1,5 +1,6 @@
 import Foundation
 @testable import OstraconMCP
+import OstraconToolKit
 import OstraconCore
 import Testing
 

@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .executable(name: "Ostracon", targets: ["Ostracon"]),
         .executable(name: "ostracon-mcp", targets: ["OstraconMCP"]),
+        .executable(name: "ostracon-cli", targets: ["OstraconCLI"]),
         .library(name: "OstraconCore", targets: ["OstraconCore"])
     ],
     targets: [
@@ -18,9 +19,17 @@ let package = Package(
             name: "Ostracon",
             dependencies: ["OstraconCore"]
         ),
+        .target(
+            name: "OstraconToolKit",
+            dependencies: ["OstraconCore"]
+        ),
         .executableTarget(
             name: "OstraconMCP",
-            dependencies: ["OstraconCore"]
+            dependencies: ["OstraconCore", "OstraconToolKit"]
+        ),
+        .executableTarget(
+            name: "OstraconCLI",
+            dependencies: ["OstraconCore", "OstraconToolKit"]
         ),
         .testTarget(
             name: "OstraconCoreTests",
@@ -28,7 +37,11 @@ let package = Package(
         ),
         .testTarget(
             name: "OstraconMCPTests",
-            dependencies: ["OstraconMCP", "OstraconCore"]
+            dependencies: ["OstraconMCP", "OstraconToolKit", "OstraconCore"]
+        ),
+        .testTarget(
+            name: "OstraconCLITests",
+            dependencies: ["OstraconCLI", "OstraconToolKit", "OstraconCore"]
         ),
         .testTarget(
             name: "OstraconTests",

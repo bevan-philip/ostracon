@@ -1,5 +1,6 @@
 import Foundation
 import OstraconCore
+import OstraconToolKit
 
 // An MCP server for Ostracon's tasks, sharing the app's SQLite database.
 //

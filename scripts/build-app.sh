@@ -11,6 +11,7 @@ BUILD_NUMBER="${BUILD_NUMBER:-1}"
 
 swift build -c release --product Ostracon
 swift build -c release --product ostracon-mcp
+swift build -c release --product ostracon-cli
 BIN_DIR="$(swift build -c release --show-bin-path)"
 BIN="$BIN_DIR/Ostracon"
 
@@ -25,8 +26,9 @@ vtool -set-build-version macos 15.0 "$SDK_VERSION" -replace \
     -output "$APP/Contents/MacOS/Ostracon.tmp" "$APP/Contents/MacOS/Ostracon" 2>/dev/null
 mv "$APP/Contents/MacOS/Ostracon.tmp" "$APP/Contents/MacOS/Ostracon"
 
-# The MCP server ships inside the app, so installing Ostracon installs it too.
+# The MCP server and CLI ship inside the app, so installing Ostracon installs them too.
 cp "$BIN_DIR/ostracon-mcp" "$APP/Contents/MacOS/ostracon-mcp"
+cp "$BIN_DIR/ostracon-cli" "$APP/Contents/MacOS/ostracon-cli"
 
 ICONSET="$(mktemp -d)/Ostracon.iconset"
 swift scripts/make-icon.swift "$ICONSET"
@@ -54,6 +56,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 
 codesign --force --sign - "$APP/Contents/MacOS/ostracon-mcp"
+codesign --force --sign - "$APP/Contents/MacOS/ostracon-cli"
 codesign --force --sign - "$APP"
 echo "Built $APP"
 

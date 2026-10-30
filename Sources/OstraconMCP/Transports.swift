@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import OstraconToolKit
 
 /// MCP's stdio transport: one JSON-RPC message per line on stdin, replies on stdout, logs on stderr.
 @MainActor

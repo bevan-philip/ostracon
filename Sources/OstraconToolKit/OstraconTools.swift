@@ -1,10 +1,10 @@
 import Foundation
 import OstraconCore
 
-/// The tools Ostracon offers over MCP, each a thin layer over `TaskRepository`.
+/// The tools Ostracon offers over MCP and the CLI, each a thin layer over `TaskRepository`.
 @MainActor
-enum OstraconTools {
-    static func all(repository: TaskRepository, now: @escaping () -> Date = { .now }) -> [MCPTool] {
+public enum OstraconTools {
+    public static func all(repository: TaskRepository, now: @escaping () -> Date = { .now }) -> [MCPTool] {
         let colors = JSONValue.array(ProjectColor.allCases.map { .string($0.rawValue) })
         let dueDescription = """
             Natural language such as "today", "tomorrow 5pm", "next fri", "in 3 days", "jan 27", \

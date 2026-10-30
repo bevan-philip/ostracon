@@ -1,7 +1,7 @@
 import Foundation
 
 /// Any JSON value, for building and reading JSON-RPC messages.
-enum JSONValue: Hashable, Sendable {
+public enum JSONValue: Hashable, Sendable {
     case null
     case bool(Bool)
     case number(Double)
@@ -9,20 +9,20 @@ enum JSONValue: Hashable, Sendable {
     case array([JSONValue])
     case object([String: JSONValue])
 
-    subscript(key: String) -> JSONValue? {
+    public subscript(key: String) -> JSONValue? {
         if case .object(let object) = self { object[key] } else { nil }
     }
 
-    var stringValue: String? {
+    public var stringValue: String? {
         if case .string(let string) = self { string } else { nil }
     }
 
-    var boolValue: Bool? {
+    public var boolValue: Bool? {
         if case .bool(let bool) = self { bool } else { nil }
     }
 
     /// Whole numbers only, also accepting numeric strings since some clients send IDs as text.
-    var int64Value: Int64? {
+    public var int64Value: Int64? {
         switch self {
         case .number(let number) where number == number.rounded(): Int64(exactly: number)
         case .string(let string): Int64(string)
@@ -30,25 +30,25 @@ enum JSONValue: Hashable, Sendable {
         }
     }
 
-    var arrayValue: [JSONValue]? {
+    public var arrayValue: [JSONValue]? {
         if case .array(let array) = self { array } else { nil }
     }
 
-    var isNull: Bool { self == .null }
+    public var isNull: Bool { self == .null }
 }
 
 extension JSONValue: ExpressibleByStringLiteral, ExpressibleByBooleanLiteral, ExpressibleByIntegerLiteral,
     ExpressibleByArrayLiteral, ExpressibleByDictionaryLiteral, ExpressibleByNilLiteral {
-    init(stringLiteral value: String) { self = .string(value) }
-    init(booleanLiteral value: Bool) { self = .bool(value) }
-    init(integerLiteral value: Int) { self = .number(Double(value)) }
-    init(arrayLiteral elements: JSONValue...) { self = .array(elements) }
-    init(dictionaryLiteral elements: (String, JSONValue)...) { self = .object(Dictionary(uniqueKeysWithValues: elements)) }
-    init(nilLiteral: ()) { self = .null }
+    public init(stringLiteral value: String) { self = .string(value) }
+    public init(booleanLiteral value: Bool) { self = .bool(value) }
+    public init(integerLiteral value: Int) { self = .number(Double(value)) }
+    public init(arrayLiteral elements: JSONValue...) { self = .array(elements) }
+    public init(dictionaryLiteral elements: (String, JSONValue)...) { self = .object(Dictionary(uniqueKeysWithValues: elements)) }
+    public init(nilLiteral: ()) { self = .null }
 }
 
 extension JSONValue: Codable {
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         if container.decodeNil() {
             self = .null
@@ -65,7 +65,7 @@ extension JSONValue: Codable {
         }
     }
 
-    func encode(to encoder: Encoder) throws {
+    public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         switch self {
         case .null: try container.encodeNil()
@@ -80,19 +80,19 @@ extension JSONValue: Codable {
 }
 
 extension JSONValue {
-    static func decode(_ data: Data) throws -> JSONValue {
+    public static func decode(_ data: Data) throws -> JSONValue {
         try JSONDecoder().decode(JSONValue.self, from: data)
     }
 
     /// Compact, single-line JSON, as stdio framing requires.
-    func encoded() -> Data {
+    public func encoded() -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         return (try? encoder.encode(self)) ?? Data("null".utf8)
     }
 
     /// Indented JSON, for tool results a model will read.
-    func prettyString() -> String {
+    public func prettyString() -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]
         return (try? encoder.encode(self)).flatMap { String(data: $0, encoding: .utf8) } ?? "null"

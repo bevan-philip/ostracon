@@ -48,6 +48,29 @@ Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json
 
 For clients that only take a URL, run `ostracon-mcp --http` and point them at `http://127.0.0.1:8765/mcp`. While developing, `swift run ostracon-mcp` runs it straight from the package.
 
+## Command line
+
+`ostracon-cli` does everything the MCP server does, from the shell. It runs the same tools on the same database, ships inside the app at `Ostracon.app/Contents/MacOS/ostracon-cli`, and the app picks up its changes within a second. Put it on your `PATH` under whatever name you like:
+
+```bash
+sudo ln -s /Applications/Ostracon.app/Contents/MacOS/ostracon-cli /usr/local/bin/ostracon
+```
+
+```bash
+ostracon add 'Pay rent tomorrow 9am #Home !1h'   # quick-add syntax, as in the app
+ostracon add Book van --parent 12 --due fri       # or flags
+ostracon list --today                             # due today or overdue
+ostracon list -p Home --all                       # one project, including completed tasks
+ostracon show 12
+ostracon edit 12 --due 'next mon 9am' --remind 30min
+ostracon done 12 13
+ostracon delete 12                                # asks first; --yes to skip
+ostracon projects
+ostracon project add 'Work Admin' --color 'lime green'
+```
+
+Projects can be given by ID or name. Single-quote task text so the shell leaves `#` and `!` alone. Add `--json` to any command for the tool's JSON output, and see `ostracon --help` for every option. While developing, `swift run ostracon-cli list` runs it straight from the package.
+
 ## Keyboard
 
 | Where | Key | Action |
@@ -90,9 +113,11 @@ Notifications need permission the first time they're scheduled; they only work f
 ## Layout
 
 ```
-Sources/OstraconCore   SQLite wrapper, repository, #-and-date parsers, task tree, reminder schedule (no UI)
-Sources/Ostracon       SwiftUI app, organised by feature (Sidebar, TaskList, Composer, Reminders, Toast)
-Sources/OstraconMCP    ostracon-mcp, the MCP server: JSON-RPC handling, tools, stdio and HTTP transports
-Tests/                 Swift Testing suites for the core, the app model and the MCP server
-scripts/               App bundling and icon generation
+Sources/OstraconCore     SQLite wrapper, repository, #-and-date parsers, task tree, reminder schedule (no UI)
+Sources/Ostracon         SwiftUI app, organised by feature (Sidebar, TaskList, Composer, Reminders, Toast)
+Sources/OstraconToolKit  The task and project tools shared by the MCP server and the CLI
+Sources/OstraconMCP      ostracon-mcp, the MCP server: JSON-RPC handling, stdio and HTTP transports
+Sources/OstraconCLI      ostracon-cli: argument parsing and text output over the same tools
+Tests/                   Swift Testing suites for the core, the app model, the MCP server and the CLI
+scripts/                 App bundling and icon generation
 ```
