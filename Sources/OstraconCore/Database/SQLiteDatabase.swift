@@ -8,8 +8,11 @@ public final class SQLiteDatabase {
     private var handle: OpaquePointer?
 
     /// Opens (creating if needed) the database at `path`. Pass `":memory:"` for an in-memory database.
-    public init(path: String) throws {
-        let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
+    ///
+    /// With `readOnly`, the file must already exist and is left exactly as it is.
+    public init(path: String, readOnly: Bool = false) throws {
+        let access = readOnly ? SQLITE_OPEN_READONLY : SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE
+        let flags = access | SQLITE_OPEN_FULLMUTEX
         let result = sqlite3_open_v2(path, &handle, flags, nil)
         guard result == SQLITE_OK else {
             let message = handle.map { String(cString: sqlite3_errmsg($0)) } ?? "Unknown error"
@@ -18,6 +21,7 @@ public final class SQLiteDatabase {
         }
         // The app and the MCP server share the file, so wait out each other's writes rather than failing.
         sqlite3_busy_timeout(handle, 5_000)
+        guard !readOnly else { return }
         try execute("PRAGMA foreign_keys = ON")
         try execute("PRAGMA journal_mode = WAL")
     }
@@ -63,6 +67,24 @@ public final class SQLiteDatabase {
         } catch {
             try? execute("ROLLBACK")
             throw error
+        }
+    }
+
+    /// Writes a consistent copy of the whole database to a new file at `path`: one file, with no journal beside it.
+    public func copy(to path: String) throws {
+        try run("VACUUM INTO ?", .text(path))
+    }
+
+    /// Replaces everything in this database with the contents of `source`, in one step that other connections
+    /// to this database see as an ordinary write.
+    public func replaceContents(with source: SQLiteDatabase) throws {
+        guard let backup = sqlite3_backup_init(handle, "main", source.handle, "main") else {
+            throw SQLiteError(code: sqlite3_errcode(handle), message: lastErrorMessage)
+        }
+        let result = sqlite3_backup_step(backup, -1)
+        sqlite3_backup_finish(backup)
+        guard result == SQLITE_DONE else {
+            throw SQLiteError(code: result, message: lastErrorMessage)
         }
     }
 

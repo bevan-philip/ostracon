@@ -19,7 +19,13 @@ scripts/build-app.sh --open   # builds build/Ostracon.app and launches it
 swift test                    # runs the test suite
 ```
 
-Data lives in `~/Library/Application Support/Ostracon/ostracon.sqlite`. Set `OSTRACON_DATABASE=/some/path.sqlite` to use a different file.
+Data lives in `~/Library/Application Support/Ostracon/ostracon.sqlite`. Set `OSTRACON_DATABASE=/some/path.sqlite` to use a different file (backups are off while it is set).
+
+### Backups
+
+In **Settings (⌘,) → Backups**, choose a folder, for example one in OneDrive, and Ostracon copies your tasks there a minute after they change and when it quits. It keeps one file a day (`Ostracon 2026-10-30.sqlite`) for the last two days. **Restore from Backup…** replaces your tasks with a backup's, after saving the current ones as `Ostracon before restore ….sqlite` in the same folder.
+
+The database itself stays on local disk, not in the synced folder. Sync services upload a file whenever they see it change, so they could catch a live SQLite database in the middle of a write. Each backup is written in full elsewhere and then moved into the folder, so OneDrive only ever sees complete files. Changes made with `ostracon-cli` or the MCP server are backed up the next time Ostracon is open.
 
 To work in Xcode, open `Package.swift`.
 
@@ -118,8 +124,8 @@ Notifications need permission the first time they're scheduled; they only work f
 ## Layout
 
 ```
-Sources/OstraconCore     SQLite wrapper, repository, #-and-date parsers, task tree, reminder schedule (no UI)
-Sources/Ostracon         SwiftUI app, organised by feature (Sidebar, TaskList, Composer, Reminders, Toast)
+Sources/OstraconCore     SQLite wrapper, repository, backups, #-and-date parsers, task tree, reminder schedule (no UI)
+Sources/Ostracon         SwiftUI app, organised by feature (Sidebar, TaskList, Composer, Reminders, Settings, Toast)
 Sources/OstraconToolKit  The task and project tools shared by the MCP server and the CLI
 Sources/OstraconMCP      ostracon-mcp, the MCP server: JSON-RPC handling, stdio and HTTP transports
 Sources/OstraconCLI      ostracon-cli: argument parsing and text output over the same tools

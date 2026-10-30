@@ -14,5 +14,10 @@ struct OstraconApp: App {
         .commands {
             TaskCommands(model: model)
         }
+
+        Settings {
+            SettingsView()
+                .environment(model)
+        }
     }
 }

@@ -5,8 +5,12 @@ public final class TaskRepository {
     private let database: SQLiteDatabase
     private var lastDataVersion: Int64?
 
-    public init(database: SQLiteDatabase) throws {
+    /// The database file, or `nil` for one in memory.
+    public let url: URL?
+
+    public init(database: SQLiteDatabase, url: URL? = nil) throws {
         self.database = database
+        self.url = url
         try Schema.migrate(database)
         try ensureInbox()
         lastDataVersion = try dataVersion()
@@ -23,17 +27,49 @@ public final class TaskRepository {
     /// or at the path in the `OSTRACON_DATABASE` environment variable if set.
     public static func openDefault() throws -> TaskRepository {
         if let path = ProcessInfo.processInfo.environment["OSTRACON_DATABASE"], !path.isEmpty {
-            return try TaskRepository(database: SQLiteDatabase(path: path))
+            return try open(URL(filePath: path))
         }
         let folder = URL.applicationSupportDirectory.appending(path: "Ostracon", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let file = folder.appending(path: "ostracon.sqlite")
-        return try TaskRepository(database: SQLiteDatabase(path: file.path(percentEncoded: false)))
+        return try open(folder.appending(path: "ostracon.sqlite"))
+    }
+
+    /// Opens (creating if needed) the database file at `url`.
+    public static func open(_ url: URL) throws -> TaskRepository {
+        try TaskRepository(database: SQLiteDatabase(path: url.path(percentEncoded: false)), url: url)
     }
 
     /// An empty in-memory repository, for tests and previews.
     public static func inMemory() throws -> TaskRepository {
         try TaskRepository(database: SQLiteDatabase(path: ":memory:"))
+    }
+
+    // MARK: - Copies
+
+    /// When anything, from this connection or another, last wrote to the database file.
+    public func lastModified() -> Date? {
+        guard let url else { return nil }
+        // Commits land in the write-ahead log, and reach the main file only when the log is checkpointed.
+        let files = [url, URL(filePath: url.path(percentEncoded: false) + "-wal")]
+        return files.compactMap { try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate }.max()
+    }
+
+    /// Writes a consistent copy of every project and task to a new file at `url`.
+    public func copy(to url: URL) throws {
+        try database.copy(to: url.path(percentEncoded: false))
+    }
+
+    /// Replaces every project and task with those in the Ostracon database at `url`, such as a backup.
+    /// Other connections, like the app's, see this as an ordinary change.
+    public func restore(from url: URL) throws {
+        let source = try SQLiteDatabase(path: url.path(percentEncoded: false), readOnly: true)
+        let tables = (try? source.query("SELECT name FROM sqlite_master WHERE type = 'table'") { $0.text(0) }) ?? []
+        guard Set(tables).isSuperset(of: ["projects", "tasks"]) else {
+            throw RepositoryError.notADatabase(url)
+        }
+        try database.replaceContents(with: source)
+        try Schema.migrate(database)
+        try ensureInbox()
     }
 
     // MARK: - Projects

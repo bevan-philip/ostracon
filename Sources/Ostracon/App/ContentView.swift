@@ -23,6 +23,7 @@ struct ContentView: View {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
                 model.reloadIfChangedElsewhere()
+                model.backUpIfChanged()
             }
         }
     }

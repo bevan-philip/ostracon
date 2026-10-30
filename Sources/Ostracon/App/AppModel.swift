@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import Observation
 import OstraconCore
 
@@ -8,6 +8,8 @@ import OstraconCore
 final class AppModel {
     private let repository: TaskRepository
     private let reminderScheduler: ReminderScheduling?
+    /// Where the backup folder is remembered; `nil` in tests that don't care.
+    private let settings: UserDefaults?
 
     private(set) var projects: [Project] = []
     private(set) var tasks: [TaskItem] = []
@@ -40,9 +42,26 @@ final class AppModel {
     var toast: Toast?
     var errorMessage: String?
 
-    init(repository: TaskRepository, reminderScheduler: ReminderScheduling? = nil) {
+    /// Where backups go, or `nil` when they're off.
+    private(set) var backupFolder: BackupFolder?
+    /// When the newest backup's copy was taken.
+    private(set) var lastBackupDate: Date?
+    /// Why the last backup failed, cleared by the next one that succeeds.
+    private(set) var backupError: String?
+    private var lastBackupAttempt: Date?
+
+    /// Back up at most this often while tasks are changing.
+    static let backupInterval: TimeInterval = 60
+    private static let backupFolderKey = "BackupFolder"
+
+    init(repository: TaskRepository, reminderScheduler: ReminderScheduling? = nil, settings: UserDefaults? = nil) {
         self.repository = repository
         self.reminderScheduler = reminderScheduler
+        self.settings = settings
+        if let path = settings?.string(forKey: Self.backupFolderKey) {
+            backupFolder = BackupFolder(url: URL(filePath: path, directoryHint: .isDirectory))
+            lastBackupDate = backupFolder?.backups().first?.date
+        }
         reload()
         selectedProjectID = projects.first?.id
         reminderScheduler?.onResponse = { [weak self] response in
@@ -54,7 +73,14 @@ final class AppModel {
     static func makeDefault() -> AppModel {
         let notifier = ReminderNotifier.makeIfAvailable()
         do {
-            return try AppModel(repository: .openDefault(), reminderScheduler: notifier)
+            // A database from OSTRACON_DATABASE, such as a test one, mustn't overwrite the real one's backups.
+            let isOverridden = ProcessInfo.processInfo.environment["OSTRACON_DATABASE"].map { !$0.isEmpty } ?? false
+            let model = try AppModel(repository: .openDefault(), reminderScheduler: notifier, settings: isOverridden ? nil : .standard)
+            // Catch the last minute's changes, which the regular backup would otherwise leave until next launch.
+            NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { model.backUpIfChanged(throttled: false) }
+            }
+            return model
         } catch {
             guard let fallback = try? TaskRepository.inMemory() else {
                 fatalError("Unable to create even an in-memory SQLite database: \(error)")
@@ -529,6 +555,62 @@ final class AppModel {
             composer = nil
         }
         perform { try repository.deleteProject(id: project.id) }
+    }
+
+    // MARK: - Backups
+
+    /// Where the database itself lives.
+    var databaseURL: URL? {
+        repository.url
+    }
+
+    /// Starts backing up to `folder`, with a backup straight away, or stops when `folder` is `nil`.
+    func setBackupFolder(_ folder: URL?) {
+        settings?.set(folder?.path(percentEncoded: false), forKey: Self.backupFolderKey)
+        backupFolder = folder.map { BackupFolder(url: $0) }
+        lastBackupDate = backupFolder?.backups().first?.date
+        backupError = nil
+        lastBackupAttempt = nil
+        backUpNow()
+    }
+
+    func backUpNow(now: Date = .now) {
+        guard let backupFolder else { return }
+        lastBackupAttempt = now
+        do {
+            try backupFolder.backUp(repository, now: now)
+            lastBackupDate = now
+            backupError = nil
+        } catch {
+            backupError = error.localizedDescription
+        }
+    }
+
+    /// Backs up if anything, here or in `ostracon-mcp` or `ostracon-cli`, has changed the database since the
+    /// last backup. Called every second; when `throttled`, waits `backupInterval` between attempts.
+    func backUpIfChanged(now: Date = .now, throttled: Bool = true) {
+        guard backupFolder != nil else { return }
+        if throttled, let lastBackupAttempt, now.timeIntervalSince(lastBackupAttempt) < Self.backupInterval { return }
+        if let lastBackupDate, let modified = repository.lastModified(), modified <= lastBackupDate { return }
+        backUpNow(now: now)
+    }
+
+    /// Replaces every project and task with those in `backup`, first saving the current ones beside the
+    /// backups (or the database, if backups are off) so a restore can itself be undone.
+    func restore(from backup: URL, now: Date = .now) {
+        let restored = perform {
+            if let backupFolder {
+                try backupFolder.backUp(repository, before: "restore", now: now)
+            } else if let databaseURL {
+                try BackupFolder(url: databaseURL.deletingLastPathComponent()).backUp(repository, before: "restore", now: now)
+            }
+            try repository.restore(from: backup)
+        }
+        guard restored else { return }
+        selectedProjectID = inbox?.id
+        selectedTaskID = nil
+        composer = nil
+        toast = Toast(message: "Restored \(backup.deletingPathExtension().lastPathComponent)")
     }
 
     // MARK: - Helpers
