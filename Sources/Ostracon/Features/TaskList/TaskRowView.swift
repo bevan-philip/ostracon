@@ -19,23 +19,19 @@ struct TaskRowView: View {
             CompletionCircle(isCompleted: task.isCompleted || isCompleting, action: complete)
 
             VStack(alignment: .leading, spacing: 2) {
+                // Completed tasks drop a level of emphasis so they recede behind open ones.
                 Text(task.content)
                     .strikethrough(task.isCompleted)
-                    .foregroundStyle(task.isCompleted ? .secondary : .primary)
+                    .foregroundStyle(task.isCompleted ? .tertiary : .primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if !task.details.isEmpty {
                     Text(task.details)
                         .font(.callout)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(task.isCompleted ? .tertiary : .secondary)
                         .lineLimit(2)
                 }
-                if task.isCollapsed && row.hasChildren {
-                    Label(
-                        row.childCount == 1 ? "1 subtask hidden" : "\(row.childCount) subtasks hidden",
-                        systemImage: "arrow.turn.down.right"
-                    )
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                if SubtaskSummary.hasContent(for: row) {
+                    SubtaskSummary(row: row, isShowingCompleted: model.showCompleted)
                 }
             }
 

@@ -67,6 +67,23 @@ struct TaskRepositoryTests {
         #expect(try rows() == ["Parent", "  Child", "Other"], "Reopening a child reopens its parent")
     }
 
+    @Test func rowsCountCompletedSubtasksEvenWhenHidden() throws {
+        let parent = try repository.addTask(content: "Parent", projectID: inbox.id)
+        let done = try repository.addTask(content: "Done", projectID: inbox.id, parentID: parent.id)
+        try repository.addTask(content: "Open", projectID: inbox.id, parentID: parent.id)
+        try repository.addTask(content: "Grandchild", projectID: inbox.id, parentID: done.id)
+        try repository.setCompleted(id: done.id, true)
+
+        for showCompleted in [false, true] {
+            let parentRow = try #require(
+                TaskTree.rows(for: try repository.tasks(), projectID: inbox.id, showCompleted: showCompleted).first
+            )
+            #expect(parentRow.subtaskCount == 2, "Direct subtasks only")
+            #expect(parentRow.completedSubtaskCount == 1)
+            #expect(parentRow.childCount == (showCompleted ? 2 : 1))
+        }
+    }
+
     @Test func collapsedTasksHideChildren() throws {
         let parent = try repository.addTask(content: "Parent", projectID: inbox.id)
         try repository.addTask(content: "Child", projectID: inbox.id, parentID: parent.id)
