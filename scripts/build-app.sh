@@ -1,10 +1,13 @@
 #!/bin/zsh
 # Builds a release Ostracon.app into ./build.
 # Usage: scripts/build-app.sh [--open]
+# VERSION and BUILD_NUMBER set the bundle's version (default 1.0 and 1).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 APP="build/Ostracon.app"
+VERSION="${VERSION:-1.0}"
+BUILD_NUMBER="${BUILD_NUMBER:-1}"
 
 swift build -c release --product Ostracon
 swift build -c release --product ostracon-mcp
@@ -29,7 +32,7 @@ ICONSET="$(mktemp -d)/Ostracon.iconset"
 swift scripts/make-icon.swift "$ICONSET"
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/Ostracon.icns"
 
-cat > "$APP/Contents/Info.plist" <<'PLIST'
+cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -40,8 +43,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleExecutable</key><string>Ostracon</string>
     <key>CFBundleIconFile</key><string>Ostracon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>1.0</string>
-    <key>CFBundleVersion</key><string>1</string>
+    <key>CFBundleShortVersionString</key><string>$VERSION</string>
+    <key>CFBundleVersion</key><string>$BUILD_NUMBER</string>
     <key>LSMinimumSystemVersion</key><string>15.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
     <key>NSHighResolutionCapable</key><true/>
